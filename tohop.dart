@@ -1,20 +1,7 @@
 import 'dart:io';
 import 'dart:math';
 
-/// =======================
-/// DATA MODEL
-/// =======================
-class DataModel {
-  final String date;
-  final int de;
-  final List<int> others;
-
-  DataModel({
-    required this.date,
-    required this.de,
-    required this.others,
-  });
-}
+import 'data_model.dart';
 
 class RoiStat {
   int hit = 0;
@@ -60,15 +47,9 @@ extension RoiPower on RoiStat {
 /// =======================
 /// CONFIG
 /// =======================
-///
-///
-const int POINT_PER_NUMBER = 5;
-const int COST = POINT_PER_NUMBER * 3 * 22500;
-const int PROFIT_PER_HIT =
-    (POINT_PER_NUMBER * 80000) - (POINT_PER_NUMBER * 3 * 22500);
-
-const double MIN_WINRATE = 85.0;
-const int MIN_TOTAL = 10;
+const int POINT_PER_NUMBER = 5; // mặc định nếu đánh đều 3 số
+const int COST_PER_POINT = 22500;
+const int PROFIT_PER_HIT_PER_POINT = 57500; // ví dụ lợi nhuận 1 điểm trúng
 
 /// =======================
 /// MAIN
@@ -95,7 +76,6 @@ Future<void> main() async {
   // TOP 3 BY DE
   // =======================
   final Map<int, List<int>> top3ByDe = {};
-
   nextDayStats.forEach((de, nums) {
     final Map<int, int> counter = {};
     for (final n in nums) {
@@ -105,14 +85,13 @@ Future<void> main() async {
     final sorted = counter.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    top3ByDe[de] = sorted.take(3).map((e) => e.key).toList();
+    top3ByDe[de] = sorted.take(2).map((e) => e.key).toList();
   });
 
   // =======================
   // ROI: HIT + TOTAL
   // =======================
   final Map<int, RoiStat> roiStats = {};
-
   for (int i = 0; i < data.length - 1; i++) {
     final deToday = data[i].de;
     final top3 = top3ByDe[deToday];
@@ -132,63 +111,108 @@ Future<void> main() async {
   // =======================
   roiStats.forEach((_, s) {
     final miss = s.total - s.hit;
-    s.profit = s.hit * PROFIT_PER_HIT - miss * COST;
+    s.profit = s.hit * PROFIT_PER_HIT_PER_POINT * POINT_PER_NUMBER -
+        miss * POINT_PER_NUMBER * COST_PER_POINT;
   });
 
   // =======================
-  // CHECK DE ĐÁNG ĐÁNH
-  // =======================
-  bool isGoodDe(RoiStat s) {
-    return s.total >= MIN_TOTAL && s.winrate >= MIN_WINRATE && s.profit > 0;
-  }
-
-  // =======================
-  // TOP DE MẠNH NHẤT
-  // =======================
-  final strongDes = roiStats.entries.where((e) => isGoodDe(e.value)).toList();
-
-  strongDes.sort(
-    (a, b) => b.value.powerScore(COST).compareTo(
-          a.value.powerScore(COST),
-        ),
-  );
-  int index = 0;
-  print('\n========= TOP DE MẠNH NHẤT =========');
-  for (final e in strongDes.take(25)) {
-    final de = e.key;
-    final s = e.value;
-    print(
-      '${index++}.DE $de | '
-      'Hit ${s.hit}/${s.total} | '
-      'Winrate ${s.winrate.toStringAsFixed(2)}% | '
-      'Profit ${s.profit} | '
-      'ROI/lần ${s.roiPerTurn.toStringAsFixed(0)} | '
-      'Power ${s.powerScore(COST).toStringAsFixed(2)}',
-    );
-  }
-
-  // =======================
-  // DỰ ĐOÁN NGÀY MAI
+  // DỰ ĐOÁN + PHÂN BỐ ĐIỂM
   // =======================
   final latestDe = data.last.de;
   final predTop3 = top3ByDe[latestDe] ?? [];
 
-  print('\n===================================================');
+  print('\n=====================START==============================');
   print('DE NGÀY GẦN NHẤT: $latestDe');
   print('→ TOP 3 DỰ ĐOÁN: $predTop3');
 
   if (roiStats.containsKey(latestDe)) {
     final s = roiStats[latestDe]!;
     print(
-      'Hit ${s.hit}/${s.total} | '
-      'Winrate ${s.winrate.toStringAsFixed(2)}% | '
-      'Profit ${s.profit} | '
-      'ROI/lần ${s.roiPerTurn.toStringAsFixed(0)}',
+        'Hit ${s.hit}/${s.total} | Winrate ${s.winrate.toStringAsFixed(2)}% | Profit ${s.profit} | ROI/lần ${s.roiPerTurn.toStringAsFixed(0)}');
+
+    final evCalc = EvCalculator(
+      payout: PROFIT_PER_HIT_PER_POINT.toDouble(),
+      stake: COST_PER_POINT.toDouble(),
     );
-    print(isGoodDe(s) ? '✅ DE NÀY ĐÁNG ĐÁNH' : '❌ DE NÀY KHÔNG NÊN ĐÁNH');
+    final evDecisions = evCalc.decide(
+      predTop3,
+      nextDayStats[latestDe] != null
+          ? {
+              for (var n in nextDayStats[latestDe]!)
+                n: nextDayStats[latestDe]!.where((x) => x == n).length
+            }
+          : {},
+      s.total,
+      minEv: 0.0,
+    );
+
+    if (evDecisions.isEmpty) {
+      print('❌ Không con nào đủ EV → nghỉ hôm nay');
+    } else {
+      print('✅ Quyết định đánh ngày mai:');
+
+      // Nhập tổng điểm hôm nay muốn đánh
+      int totalPointsToday = 15; // ví dụ đánh 15 điểm hôm nay
+
+      for (var d in evDecisions) {
+        int pointsForNumber = max(1, (totalPointsToday * d.fraction).round());
+        int cost = pointsForNumber * COST_PER_POINT;
+        int profit = pointsForNumber * PROFIT_PER_HIT_PER_POINT;
+        print(
+            'Number ${d.number.toString().padLeft(2, '0')} → Points: $pointsForNumber | Cost: $cost | Profit: $profit | Fraction: ${(d.fraction * 100).toStringAsFixed(1)}% | EV: ${d.ev.toStringAsFixed(2)}');
+      }
+    }
   } else {
     print('Chưa có dữ liệu lịch sử cho DE này');
   }
+  print('========================END===========================');
+}
 
-  print('===================================================');
+/// =======================
+/// TÍNH EV & DECIDE
+/// =======================
+class EvDecision {
+  final int number;
+  final double ev;
+  double fraction;
+  EvDecision(this.number, this.ev, this.fraction);
+
+  @override
+  String toString() =>
+      'Number: ${number.toString().padLeft(2, '0')} | EV: ${ev.toStringAsFixed(3)} | Fraction: ${(fraction * 100).toStringAsFixed(1)}%';
+}
+
+class EvCalculator {
+  final double payout; // lợi nhuận trên 1 điểm
+  final double stake; // COST mỗi điểm
+
+  EvCalculator({this.payout = 3.55, this.stake = 1.0});
+
+  double computeEv(double probability) =>
+      probability * payout - (1 - probability) * stake;
+
+  List<EvDecision> decide(
+      List<int> numbers, Map<int, int> counts, int totalDays,
+      {double minEv = 0.0}) {
+    final List<EvDecision> list = [];
+    double totalEv = 0;
+
+    for (var n in numbers) {
+      final p = (counts[n] ?? 0) / totalDays;
+      final ev = computeEv(p);
+      if (ev >= minEv) {
+        list.add(EvDecision(n, ev, 0.0));
+        totalEv += ev;
+      }
+    }
+
+    if (list.isEmpty) return [];
+
+    for (var d in list) {
+      d.fraction = d.ev / totalEv;
+    }
+
+    list.sort((a, b) => b.ev.compareTo(a.ev));
+    return list;
+  }
 }
