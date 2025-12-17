@@ -112,7 +112,7 @@ Future<void> main() async {
   print('TOP 3 SỐ MẠNH NHẤT: '
       '${finalTop3.map((e) => e.toString().padLeft(2, '0')).toList()}');
 
-  print('\nChi tiết vote:');
+  print('\nChi tiết vote: ${globalVotes.length}');
   globalVotes.entries.toList()
     ..sort((a, b) => b.value.compareTo(a.value))
     ..forEach((e) {
