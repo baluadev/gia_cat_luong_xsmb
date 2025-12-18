@@ -5,9 +5,14 @@ import 'dart:io';
 /// =======================
 class DataModel {
   final String date;
+  final int de;
   final List<int> others;
 
-  DataModel({required this.date, required this.others});
+  DataModel({
+    required this.date,
+    required this.de,
+    required this.others,
+  });
 }
 
 /// =======================
@@ -21,6 +26,7 @@ Future<List<DataModel>> loadData(String path) async {
     final p = l.split(',');
     return DataModel(
       date: p[0],
+      de: int.parse(p[1]),
       others: p.sublist(2).map(int.parse).toList(),
     );
   }).toList();
@@ -36,32 +42,18 @@ List<int> topN(Map<int, int> freq, int n) {
 }
 
 /// =======================
-/// MAIN
+/// BUILD GLOBAL VOTES (CẦU)
 /// =======================
-Future<void> main() async {
-  final data = await loadData('data.csv');
-  data.sort(
-    (a, b) => DateTime.parse(a.date).compareTo(DateTime.parse(b.date)),
-  );
-
-  final todayIndex = data.length - 1;
-  final today = data[todayIndex];
-
-  print('📅 Ngày phân tích: ${today.date.split(" ").first}');
-  print('Others hôm nay: ${today.others}\n');
-
-  /// 🔥 MERGE CUỐI CÙNG
+Map<int, int> buildGlobalVotes(List<DataModel> data, int endIndex) {
+  final today = data[endIndex];
   final Map<int, int> globalVotes = {};
 
-  /// =======================
-  /// DUYỆT MỖI SỐ X
-  /// =======================
   for (final x in today.others) {
     final Map<int, int> futureFreq = {};
     final Map<int, int> pastFreq = {};
 
-    /// ===== PHƯƠNG ÁN A: X → date +1 =====
-    for (int i = 0; i < data.length - 1; i++) {
+    /// A: X xuất hiện → ngày sau ra gì
+    for (int i = 0; i < endIndex; i++) {
       if (data[i].others.contains(x)) {
         for (final n in data[i + 1].others) {
           futureFreq[n] = (futureFreq[n] ?? 0) + 1;
@@ -69,9 +61,9 @@ Future<void> main() async {
       }
     }
 
-    /// ===== PHƯƠNG ÁN B: date -1 -2 -3 =====
+    /// B: 3 ngày trước
     for (int k = 1; k <= 3; k++) {
-      final idx = todayIndex - k;
+      final idx = endIndex - k;
       if (idx < 0) continue;
       for (final n in data[idx].others) {
         pastFreq[n] = (pastFreq[n] ?? 0) + 1;
@@ -81,9 +73,7 @@ Future<void> main() async {
     final topFuture = topN(futureFreq, 5);
     final topPast = topN(pastFreq, 5);
 
-    /// ===== MERGE CHO RIÊNG X =====
     final Map<int, int> localVotes = {};
-
     for (final n in topFuture) {
       localVotes[n] = (localVotes[n] ?? 0) + 1;
     }
@@ -92,30 +82,115 @@ Future<void> main() async {
     }
 
     final top3X = topN(localVotes, 3);
-
-    /// ===== ĐẨY VÀO MERGE TOÀN CỤC =====
     for (final n in top3X) {
       globalVotes[n] = (globalVotes[n] ?? 0) + 1;
     }
-
-    /// ===== LOG =====
-    print('X = ${x.toString().padLeft(2, '0')}'
-        ' → TOP3: ${top3X.map((e) => e.toString().padLeft(2, '0')).toList()}');
   }
 
-  /// =======================
-  /// KẾT QUẢ CUỐI
-  /// =======================
-  final finalTop3 = topN(globalVotes, 3);
+  return globalVotes;
+}
 
-  print('\n=========== 🎯 GỢI Ý CUỐI ==========');
-  print('TOP 3 SỐ MẠNH NHẤT: '
-      '${finalTop3.map((e) => e.toString().padLeft(2, '0')).toList()}');
+Future<void> main() async {
+  final data = await loadData('data.csv');
+  data.sort(
+    (a, b) => DateTime.parse(a.date).compareTo(DateTime.parse(b.date)),
+  );
 
-  print('\nChi tiết vote: ${globalVotes.length}');
-  globalVotes.entries.toList()
-    ..sort((a, b) => b.value.compareTo(a.value))
-    ..forEach((e) {
-      print('${e.key.toString().padLeft(2, '0')} : ${e.value}');
-    });
+  int win = 0;
+  int lose = 0;
+
+  int currentLoseStreak = 0;
+  int maxLoseStreak = 0;
+
+  final List<String> wlHistory = [];
+
+  /// DE → WIN / TOTAL
+  final Map<int, int> deWin = {};
+  final Map<int, int> deTotal = {};
+
+  /// ========= BACKTEST =========
+  for (int i = 5; i < data.length - 1; i++) {
+    final today = data[i];
+    final tomorrow = data[i + 1];
+
+    final globalVotes = buildGlobalVotes(data, i);
+    final picks = globalVotes.keys.toSet();
+
+    final isWin = picks.contains(tomorrow.de);
+
+    if (isWin) {
+      win++;
+      currentLoseStreak = 0;
+    } else {
+      lose++;
+      currentLoseStreak++;
+      if (currentLoseStreak > maxLoseStreak) {
+        maxLoseStreak = currentLoseStreak;
+      }
+    }
+
+    /// DE stats
+    deTotal[today.de] = (deTotal[today.de] ?? 0) + 1;
+    if (isWin) {
+      deWin[today.de] = (deWin[today.de] ?? 0) + 1;
+    }
+  }
+
+  /// ========= BUILD DE TỐT =========
+  final Set<int> goodDEs = {};
+
+  for (final de in deTotal.keys) {
+    final total = deTotal[de]!;
+    if (total < 5) continue;
+
+    final w = deWin[de] ?? 0;
+    final rate = w / total * 100;
+
+    if (rate >= 55) {
+      goodDEs.add(de);
+    }
+  }
+
+  /// ========= RE-BACKTEST ĐỂ IN CHUỖI =========
+  currentLoseStreak = 0;
+
+  for (int i = 5; i < data.length - 1; i++) {
+    final today = data[i];
+    final tomorrow = data[i + 1];
+
+    final globalVotes = buildGlobalVotes(data, i);
+    final picks = globalVotes.keys.toSet();
+
+    final isWin = picks.contains(tomorrow.de);
+    final isGoodDE = goodDEs.contains(today.de);
+
+    String tag;
+    if (isGoodDE) {
+      tag = '${isWin ? "W" : "L"}(${today.de.toString().padLeft(2, '0')})';
+    } else {
+      tag = isWin ? 'W' : 'L';
+    }
+
+    wlHistory.add(tag);
+  }
+
+  /// ========= OUTPUT =========
+  print('\n=========== 📈 TỔNG KẾT ==========');
+  print('WIN : $win');
+  print('LOSE: $lose');
+  print('Winrate: ${(win / (win + lose) * 100).toStringAsFixed(2)}%');
+
+  print('\n=========== ❌ CẦU THUA ==========');
+  print('❌ Max LOSE liên tiếp: $maxLoseStreak');
+  print('Chuỗi W/L:\n');
+  print(wlHistory.join(' '));
+
+  print('\n=========== 🎯 DE THUỘC CẦU TỐT ==========');
+  for (final de in goodDEs) {
+    final w = deWin[de]!;
+    final t = deTotal[de]!;
+    print(
+      'DE ${de.toString().padLeft(2, '0')} | Win $w/$t | ${(w / t * 100).toStringAsFixed(2)}%',
+    );
+  }
 }
