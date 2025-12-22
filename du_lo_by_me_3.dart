@@ -12,18 +12,6 @@ class RoiStat {
   double get roiPerTurn => total == 0 ? 0 : profit / total;
 }
 
-class CauItem {
-  final bool win;
-  final int de;
-  final String date; // dd/MM/yyyy
-
-  CauItem({
-    required this.win,
-    required this.de,
-    required this.date,
-  });
-}
-
 /// =======================
 /// CẦU TỔNG & CẦU THEO DE
 /// =======================
@@ -33,15 +21,10 @@ class TotalCauStat {
   int currentWin = 0;
   int currentLose = 0;
 
-  final List<CauItem> history = [];
+  final List<bool> history = [];
 
-  void add(
-    bool win,
-    int de,
-    String date,
-  ) {
-    history.add(CauItem(win: win, de: de, date: date));
-
+  void add(bool win) {
+    history.add(win);
     if (win) {
       currentWin++;
       currentLose = 0;
@@ -53,20 +36,7 @@ class TotalCauStat {
     }
   }
 
-  /// ✅ WWL(20/12/2025 - 16)
-  String textWithLatestDe(int latestDe) {
-    final sb = StringBuffer();
-
-    for (final item in history) {
-      final char = item.win ? 'W' : 'L';
-      if (item.de == latestDe) {
-        sb.write('$char(${item.date.split(' ').first} - ${item.de})');
-      } else {
-        sb.write(char);
-      }
-    }
-    return sb.toString();
-  }
+  String get text => history.map((e) => e ? 'W' : 'L').join('');
 }
 
 class DeCauStat {
@@ -130,12 +100,9 @@ const int COST_PER_POINT = 22500;
 const int PROFIT_PER_HIT_PER_POINT = 80000; // ví dụ lợi nhuận 1 điểm trúng
 const int TOP_N_NUMBERS = 2; // số lượng số top để dự đoán
 const int TOTAL_POINTS_TODAY = 15; // tổng điểm muốn đánh hôm nay
-const int MIN_DE_SAMPLE =
-    8; // tối thiểu số lần DE xuất hiện để coi là đủ dữ liệu
-const int MIN_HIT_PER_NUMBER =
-    3; // tối thiểu số lần 1 số WIN sau DE này để coi là đủ dày
-const double MIN_TRUST_WINRATE =
-    50.0; // winrate tối thiểu để coi là có thể cân nhắc
+const int MIN_DE_SAMPLE = 8; // tối thiểu số lần DE xuất hiện để coi là đủ dữ liệu
+const int MIN_HIT_PER_NUMBER = 3; // tối thiểu số lần 1 số WIN sau DE này để coi là đủ dày
+const double MIN_TRUST_WINRATE = 50.0; // winrate tối thiểu để coi là có thể cân nhắc
 
 /// =======================
 /// MAIN
@@ -145,27 +112,26 @@ Future<void> main() async {
   // LOAD + SORT (cache DateTime để tối ưu)
   // =======================
   final data = await loadDataModels('data.csv');
-
+  
   // Cache DateTime để tránh parse nhiều lần
-  final dataWithDate = data
-      .map((d) => (
-            model: d,
-            dateTime: DateTime.parse(d.date),
-          ))
-      .toList();
+  final dataWithDate = data.map((d) => (
+    model: d,
+    dateTime: DateTime.parse(d.date),
+  )).toList();
   dataWithDate.sort((a, b) => a.dateTime.compareTo(b.dateTime));
   final sortedData = dataWithDate.map((e) => e.model).toList();
   print(sortedData.first.date);
 
   // =======================
-  // MAP: DE -> COUNTS (tối ưu: tính counts trực tiếp, không cần lưu list)
+  // MAP: KEY -> COUNTS (ở đây KEY = giải nhất, index = 1 trong others ngày A)
   // =======================
   final Map<int, Map<int, int>> nextDayCounts = {}; // Cache counts để dùng sau
 
   for (int i = 0; i < sortedData.length - 1; i++) {
-    final deToday = sortedData[i].de;
+    // Thay vì dùng DE của ngày A, dùng giải nhất (others[1]) của ngày A
+    final deToday = sortedData[i].others[1];
     final nextDayOthers = sortedData[i + 1].others;
-
+    
     // Tính counts trực tiếp, không cần lưu list
     nextDayCounts.putIfAbsent(deToday, () => <int, int>{});
     final counter = nextDayCounts[deToday]!;
@@ -191,7 +157,8 @@ Future<void> main() async {
   final Map<int, RoiStat> roiStats = {};
   final Map<int, List<bool>> deHitHistory = {}; // lưu chuỗi W/L cho từng DE
   for (int i = 0; i < sortedData.length - 1; i++) {
-    final deToday = sortedData[i].de;
+    // Thay vì dùng DE của ngày A, dùng giải nhất (others[1]) của ngày A
+    final deToday = sortedData[i].others[1];
     final topN = topNByDe[deToday];
     if (topN == null || topN.isEmpty) continue;
 
@@ -220,7 +187,8 @@ Future<void> main() async {
   // =======================
   // DỰ ĐOÁN + PHÂN BỐ ĐIỂM
   // =======================
-  final latestDe = sortedData.last.de;
+  // Thay vì dùng DE ngày gần nhất, dùng giải nhất (others[1]) ngày gần nhất
+  final latestDe = sortedData.last.others[1];
   final predTopN = topNByDe[latestDe] ?? [];
   final latestDeHistory = deHitHistory[latestDe] ?? const <bool>[];
 
@@ -229,7 +197,8 @@ Future<void> main() async {
   print('→ TOP $TOP_N_NUMBERS DỰ ĐOÁN: $predTopN');
 
   if (latestDeHistory.isNotEmpty) {
-    final historyStr = latestDeHistory.map((e) => e ? 'W' : 'L').join('');
+    final historyStr =
+        latestDeHistory.map((e) => e ? 'W' : 'L').join('');
 
     int currentStreak = 0;
     bool? currentIsWin;
@@ -244,7 +213,8 @@ Future<void> main() async {
       }
     }
 
-    final stateLabel = currentIsWin == true ? 'WIN' : 'LOSE';
+    final stateLabel =
+        currentIsWin == true ? 'WIN' : 'LOSE';
 
     print('Chuỗi cầu riêng DE $latestDe: $historyStr');
     print('Hiện tại cầu DE $latestDe: $stateLabel $currentStreak');
@@ -289,13 +259,14 @@ Future<void> main() async {
       payout: PROFIT_PER_HIT_PER_POINT.toDouble(),
       stake: COST_PER_POINT.toDouble(),
     );
-
+    
     // Tối ưu: dùng cached counts thay vì tính lại
     final counts = nextDayCounts[latestDe] ?? {};
 
     // Lọc bớt các số quá mỏng dữ liệu (ít lần WIN sau DE này)
-    final eligibleNumbers =
-        predTopN.where((n) => (counts[n] ?? 0) >= MIN_HIT_PER_NUMBER).toList();
+    final eligibleNumbers = predTopN
+        .where((n) => (counts[n] ?? 0) >= MIN_HIT_PER_NUMBER)
+        .toList();
 
     final evDecisions = evCalc.decide(
       eligibleNumbers.isEmpty ? predTopN : eligibleNumbers,
@@ -308,7 +279,7 @@ Future<void> main() async {
       print('❌ Không con nào đủ EV → nghỉ hôm nay');
     } else {
       print('✅ Quyết định đánh ngày mai:');
-
+      
       // Cảnh báo: nếu cầu DE vừa có chuỗi W dài và hiện đang L ngắn => dễ L tiếp
       double pointsFactor = 1.0;
       if (latestDeHistory.length >= 2) {
@@ -353,29 +324,26 @@ Future<void> main() async {
 
       // Tính tần suất xuất hiện của topN cho 'de' này
       final counts = nextDayCounts[latestDe] ?? {};
-      final totalOccurrences =
-          counts.values.fold<int>(0, (sum, count) => sum + count);
-
+      final totalOccurrences = counts.values.fold<int>(0, (sum, count) => sum + count);
+      
       print('\n📊 TẦN SUẤT XUẤT HIỆN CỦA TOP $TOP_N_NUMBERS (DE=$latestDe):');
       print('   Tổng số lần xuất hiện tất cả số: $totalOccurrences');
       print('   Số ngày DE=$latestDe xuất hiện: ${s.total}');
-
+      
       // Phân tích cầu cho từng số trong topN
       final Map<int, CauAnalysis> cauAnalyses = {};
       for (var num in predTopN) {
         cauAnalyses[num] = analyzeCau(sortedData, latestDe, num);
       }
-
+      
       for (var num in predTopN) {
         final frequency = counts[num] ?? 0;
         final percentage = s.total > 0 ? (frequency / s.total * 100) : 0.0;
         final avgPerDay = s.total > 0 ? (frequency / s.total) : 0.0;
         final cau = cauAnalyses[num]!;
-        print(
-            '   Số ${num.toString().padLeft(2, '0')}: $frequency lần (${percentage.toStringAsFixed(1)}% ngày, trung bình ${avgPerDay.toStringAsFixed(2)} lần/ngày)');
-        print(
-            '      Lần xuất hiện gần nhất: ${cau.lastOccurrenceDays == 0 ? "Hôm nay" : cau.lastOccurrenceDays > 0 ? "${cau.lastOccurrenceDays} ngày trước" : "Chưa từng xuất hiện"}');
-
+        print('   Số ${num.toString().padLeft(2, '0')}: $frequency lần (${percentage.toStringAsFixed(1)}% ngày, trung bình ${avgPerDay.toStringAsFixed(2)} lần/ngày)');
+        print('      Lần xuất hiện gần nhất: ${cau.lastOccurrenceDays == 0 ? "Hôm nay" : cau.lastOccurrenceDays > 0 ? "${cau.lastOccurrenceDays} ngày trước" : "Chưa từng xuất hiện"}');
+        
         String maxCauInfo = '${cau.maxCauLength} ngày';
         if (cau.maxCauPosition > 0) {
           // đang ở trong cầu WIN (vì cầu được định nghĩa theo chuỗi xuất hiện - W)
@@ -384,7 +352,7 @@ Future<void> main() async {
         } else if (cau.maxCauLength > 0) {
           maxCauInfo += ' (không trong cầu này, hiện tại là L)';
         }
-
+        
         String minCauInfo = '${cau.minCauLength} ngày';
         if (cau.minCauPosition > 0) {
           // đang ở trong cầu WIN ngắn nhất
@@ -393,7 +361,7 @@ Future<void> main() async {
         } else if (cau.minCauLength > 0) {
           minCauInfo += ' (không trong cầu này, hiện tại là L)';
         }
-
+        
         print('      Cầu dài nhất: $maxCauInfo');
         print('      Cầu ngắn nhất: $minCauInfo');
       }
@@ -437,8 +405,8 @@ Future<void> main() async {
                 ? 'trúng cách đây ${cau.lastOccurrenceDays} lần xuất hiện DE này'
                 : 'chưa từng trúng sau DE này';
 
-        final inWinNow = (cau.maxCauPosition > 0 || cau.minCauPosition > 0) &&
-            cau.lastOccurrenceDays == 0;
+        final inWinNow =
+            (cau.maxCauPosition > 0 || cau.minCauPosition > 0) && cau.lastOccurrenceDays == 0;
 
         String dataText;
         if (freq >= MIN_HIT_PER_NUMBER) {
@@ -449,9 +417,8 @@ Future<void> main() async {
           dataText = 'chưa có mẫu thắng';
         }
 
-        final stateText = inWinNow
-            ? 'đang ở trong cầu W'
-            : 'đang ở pha L so với các cầu lịch sử';
+        final stateText =
+            inWinNow ? 'đang ở trong cầu W' : 'đang ở pha L so với các cầu lịch sử';
 
         print(
             '  - Số ${num.toString().padLeft(2, '0')}: xuất hiện $freq lần ($dataText), $lastText, $stateText');
@@ -472,8 +439,7 @@ Future<void> main() async {
 /// =======================
 /// SOI CẦU (từ tohop2.dart)
 /// =======================
-void runCauAnalysis(List<DataModel> sortedData,
-    {int pickCount = TOP_N_NUMBERS}) {
+void runCauAnalysis(List<DataModel> sortedData, {int pickCount = TOP_N_NUMBERS}) {
   final Map<int, List<int>> historyStats = {};
   final totalCau = TotalCauStat();
   final Map<int, DeCauStat> deStats = {};
@@ -482,7 +448,9 @@ void runCauAnalysis(List<DataModel> sortedData,
     final today = sortedData[i];
     final tomorrow = sortedData[i + 1];
 
-    final pastNums = historyStats[today.de];
+    // Dùng giải nhất (others[1]) của ngày A làm khóa soi cầu tổng
+    final keyToday = today.others[1];
+    final pastNums = historyStats[keyToday];
     if (pastNums != null && pastNums.isNotEmpty) {
       final counter = <int, int>{};
       for (final n in pastNums) {
@@ -495,10 +463,10 @@ void runCauAnalysis(List<DataModel> sortedData,
       final picks = sorted.take(pickCount).map((e) => e.key).toList();
       final win = picks.any(tomorrow.others.contains);
 
-      totalCau.add(win, today.de, today.date);
+      totalCau.add(win);
 
-      deStats.putIfAbsent(today.de, () => DeCauStat());
-      deStats[today.de]!.add(win);
+      deStats.putIfAbsent(keyToday, () => DeCauStat());
+      deStats[keyToday]!.add(win);
 
       // print(
       //   '${today.date.split(" ").first} | DE ${today.de.toString().padLeft(2, '0')} '
@@ -507,13 +475,13 @@ void runCauAnalysis(List<DataModel> sortedData,
       // );
     }
 
-    historyStats.putIfAbsent(today.de, () => []);
-    historyStats[today.de]!.addAll(tomorrow.others);
+    historyStats.putIfAbsent(keyToday, () => []);
+    historyStats[keyToday]!.addAll(tomorrow.others);
   }
-  final latestDe = sortedData.last.de;
+
   // Kết quả cầu tổng
   print('\n================ CẦU TỔNG =================');
-  print('Chuỗi cầu: ${totalCau.textWithLatestDe(latestDe)}');
+  print('Chuỗi cầu: ${totalCau.text}');
   print('✅ Max WIN liên tiếp: ${totalCau.maxWinStreak}');
   print('❌ Max LOSE liên tiếp: ${totalCau.maxLoseStreak}');
   print(
@@ -541,18 +509,20 @@ class CauAnalysis {
 }
 
 CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
-  // Tìm tất cả các ngày có DE = de và kiểm tra số có xuất hiện trong others ngày tiếp theo không
+  // Tìm tất cả các ngày có KEY = de (KEY = giải nhất others[1]) và kiểm tra
+  // số có xuất hiện trong others ngày tiếp theo không
   final List<bool> occurrences = [];
   final List<int> dayIndices = []; // Lưu index của các ngày có DE = de
-
+  
   for (int i = 0; i < sortedData.length - 1; i++) {
-    if (sortedData[i].de == de) {
+    // So sánh theo giải nhất (others[1]) thay vì DE
+    if (sortedData[i].others[1] == de) {
       dayIndices.add(i);
       final nextDayOthers = sortedData[i + 1].others.toSet();
       occurrences.add(nextDayOthers.contains(number));
     }
   }
-
+  
   if (occurrences.isEmpty) {
     return CauAnalysis(
       lastOccurrenceDays: -1,
@@ -562,7 +532,7 @@ CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
       minCauPosition: 0,
     );
   }
-
+  
   // Tìm lần xuất hiện gần nhất (từ cuối lên)
   int lastOccurrenceDays = -1;
   for (int i = occurrences.length - 1; i >= 0; i--) {
@@ -571,12 +541,12 @@ CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
       break;
     }
   }
-
+  
   // Phân tích cầu: tìm các chuỗi liên tiếp
   List<int> cauLengths = [];
   int currentCauLength = 0;
   bool inCau = false;
-
+  
   for (int i = 0; i < occurrences.length; i++) {
     if (occurrences[i]) {
       if (!inCau) {
@@ -596,12 +566,12 @@ CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
   if (inCau) {
     cauLengths.add(currentCauLength);
   }
-
+  
   // Tìm cầu hiện tại (cầu cuối cùng nếu đang trong cầu)
   int currentCauLengthNow = 0;
   int currentCauPosition = 0;
   bool inCurrentCau = false;
-
+  
   for (int i = occurrences.length - 1; i >= 0; i--) {
     if (occurrences[i]) {
       if (!inCurrentCau) {
@@ -618,20 +588,20 @@ CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
       }
     }
   }
-
+  
   // Tìm max và min cầu từ lịch sử (bao gồm cả cầu hiện tại nếu có)
   List<int> allCauLengths = List.from(cauLengths);
   if (inCurrentCau && currentCauLengthNow > 0) {
     allCauLengths.add(currentCauLengthNow);
   }
-
+  
   int maxCauLength = allCauLengths.isNotEmpty ? allCauLengths.reduce(max) : 0;
   int minCauLength = allCauLengths.isNotEmpty ? allCauLengths.reduce(min) : 0;
-
+  
   // Vị trí trong cầu: nếu đang trong cầu và cầu đó = max/min thì hiển thị vị trí, ngược lại = 0
   int maxCauPosition = 0;
   int minCauPosition = 0;
-
+  
   if (inCurrentCau && currentCauLengthNow > 0) {
     if (currentCauLengthNow == maxCauLength) {
       maxCauPosition = currentCauPosition;
@@ -640,7 +610,7 @@ CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
       minCauPosition = currentCauPosition;
     }
   }
-
+  
   return CauAnalysis(
     lastOccurrenceDays: lastOccurrenceDays,
     maxCauLength: maxCauLength,
