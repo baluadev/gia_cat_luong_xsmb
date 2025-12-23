@@ -123,13 +123,12 @@ Future<void> main() async {
   print(sortedData.first.date);
 
   // =======================
-  // MAP: KEY -> COUNTS (ở đây KEY = giải nhất, index = 1 trong others ngày A)
+  // MAP: DE -> COUNTS (tối ưu: tính counts trực tiếp, không cần lưu list)
   // =======================
   final Map<int, Map<int, int>> nextDayCounts = {}; // Cache counts để dùng sau
 
   for (int i = 0; i < sortedData.length - 1; i++) {
-    // Thay vì dùng DE của ngày A, dùng giải nhất (others[1]) của ngày A
-    final deToday = sortedData[i].others[1];
+    final deToday = sortedData[i].de;
     final nextDayOthers = sortedData[i + 1].others;
     
     // Tính counts trực tiếp, không cần lưu list
@@ -157,8 +156,7 @@ Future<void> main() async {
   final Map<int, RoiStat> roiStats = {};
   final Map<int, List<bool>> deHitHistory = {}; // lưu chuỗi W/L cho từng DE
   for (int i = 0; i < sortedData.length - 1; i++) {
-    // Thay vì dùng DE của ngày A, dùng giải nhất (others[1]) của ngày A
-    final deToday = sortedData[i].others[1];
+    final deToday = sortedData[i].de;
     final topN = topNByDe[deToday];
     if (topN == null || topN.isEmpty) continue;
 
@@ -187,8 +185,7 @@ Future<void> main() async {
   // =======================
   // DỰ ĐOÁN + PHÂN BỐ ĐIỂM
   // =======================
-  // Thay vì dùng DE ngày gần nhất, dùng giải nhất (others[1]) ngày gần nhất
-  final latestDe = sortedData.last.others[1];
+  final latestDe = sortedData.last.de;
   final predTopN = topNByDe[latestDe] ?? [];
   final latestDeHistory = deHitHistory[latestDe] ?? const <bool>[];
 
@@ -448,9 +445,7 @@ void runCauAnalysis(List<DataModel> sortedData, {int pickCount = TOP_N_NUMBERS})
     final today = sortedData[i];
     final tomorrow = sortedData[i + 1];
 
-    // Dùng giải nhất (others[1]) của ngày A làm khóa soi cầu tổng
-    final keyToday = today.others[1];
-    final pastNums = historyStats[keyToday];
+    final pastNums = historyStats[today.de];
     if (pastNums != null && pastNums.isNotEmpty) {
       final counter = <int, int>{};
       for (final n in pastNums) {
@@ -465,8 +460,8 @@ void runCauAnalysis(List<DataModel> sortedData, {int pickCount = TOP_N_NUMBERS})
 
       totalCau.add(win);
 
-      deStats.putIfAbsent(keyToday, () => DeCauStat());
-      deStats[keyToday]!.add(win);
+      deStats.putIfAbsent(today.de, () => DeCauStat());
+      deStats[today.de]!.add(win);
 
       // print(
       //   '${today.date.split(" ").first} | DE ${today.de.toString().padLeft(2, '0')} '
@@ -475,8 +470,8 @@ void runCauAnalysis(List<DataModel> sortedData, {int pickCount = TOP_N_NUMBERS})
       // );
     }
 
-    historyStats.putIfAbsent(keyToday, () => []);
-    historyStats[keyToday]!.addAll(tomorrow.others);
+    historyStats.putIfAbsent(today.de, () => []);
+    historyStats[today.de]!.addAll(tomorrow.others);
   }
 
   // Kết quả cầu tổng
@@ -509,14 +504,12 @@ class CauAnalysis {
 }
 
 CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
-  // Tìm tất cả các ngày có KEY = de (KEY = giải nhất others[1]) và kiểm tra
-  // số có xuất hiện trong others ngày tiếp theo không
+  // Tìm tất cả các ngày có DE = de và kiểm tra số có xuất hiện trong others ngày tiếp theo không
   final List<bool> occurrences = [];
   final List<int> dayIndices = []; // Lưu index của các ngày có DE = de
   
   for (int i = 0; i < sortedData.length - 1; i++) {
-    // So sánh theo giải nhất (others[1]) thay vì DE
-    if (sortedData[i].others[1] == de) {
+    if (sortedData[i].de == de) {
       dayIndices.add(i);
       final nextDayOthers = sortedData[i + 1].others.toSet();
       occurrences.add(nextDayOthers.contains(number));
