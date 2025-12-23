@@ -77,9 +77,6 @@ void main() async {
   final cauBoth = CauStat();
 
   // Duyệt qua từng ngày và kiểm tra xem có ít nhất 1 trong 3 số (91, 92 hoặc 93) xuất hiện không
-  // Lưu thông tin số con trúng để tính tiền thắng chính xác
-  final List<int> hitCounts = []; // Số con trúng mỗi ngày (1, 2, hoặc 3)
-  
   for (final day in sortedData) {
     final othersSet = day.others.toSet();
     
@@ -89,13 +86,6 @@ void main() async {
     final has93 = othersSet.contains(93);
     final atLeastOne = has91 || has92 || has93;
     cauBoth.add(atLeastOne);
-    
-    // Đếm số con trúng
-    int hitCount = 0;
-    if (has91) hitCount++;
-    if (has92) hitCount++;
-    if (has93) hitCount++;
-    hitCounts.add(hitCount);
   }
 
   // In kết quả thống kê
@@ -122,254 +112,6 @@ void main() async {
     print('\n📅 NGÀY GẦN NHẤT (${latestDay.date.split(' ').first}):');
     print('  Kết quả: ${latestAtLeastOne ? "✅ WIN (có ít nhất 1 số)" : "❌ LOSE (không có số nào)"}');
   }
-
-  // =======================
-  // TÍNH PROFIT VỚI CHIẾN LƯỢC GẤP THẾP
-  // =======================
-  const int initialPoints = 15; // Điểm ban đầu
-  const int numberOfNumbers = 3; // Số con đánh (91, 92, 93)
-  const double multiplier = 2.0; // Hệ số gấp thếp (x2)
-  const int costPerPoint = 22500; // Giá 1 điểm lô (VNĐ)
-  const int payoutPerPoint = 80000; // Tiền thắng 1 điểm lô (VNĐ)
-
-  print('\n💰 TÍNH PROFIT VỚI CHIẾN LƯỢC GẤP THẾP:');
-  print('============================================================');
-  print('  Điểm ban đầu: $initialPoints điểm/con');
-  print('  Số con đánh: $numberOfNumbers con (91, 92, 93)');
-  print('  Hệ số gấp thếp: x$multiplier');
-  print('  Giá 1 điểm: ${costPerPoint.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  Tiền thắng 1 điểm: ${payoutPerPoint.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-
-  // Mô phỏng chiến lược gấp thếp
-  int currentPoints = initialPoints;
-  int totalCapital = 0; // Tổng vốn đã bỏ ra
-  int totalProfit = 0; // Tổng lợi nhuận
-  int totalLoseSequences = 0; // Số chuỗi LOSE
-  int maxLoseSequenceLength = 0; // Độ dài chuỗi LOSE dài nhất
-  int maxCapitalInSequence = 0; // Vốn lớn nhất trong 1 chuỗi LOSE
-  final List<Map<String, dynamic>> loseSequences = []; // Lưu thông tin các chuỗi LOSE
-
-  int sequenceStartIndex = -1;
-  int sequenceLength = 0;
-  int sequenceCapital = 0;
-
-  for (int i = 0; i < cauBoth.history.length; i++) {
-    final isWin = cauBoth.history[i];
-
-    if (!isWin) {
-      // LOSE: Tính vốn cho ngày này
-      if (sequenceStartIndex == -1) {
-        sequenceStartIndex = i;
-        sequenceLength = 0;
-        sequenceCapital = 0;
-        currentPoints = initialPoints; // Reset về điểm ban đầu khi bắt đầu chuỗi LOSE mới
-      }
-
-      // Tính vốn cho ngày này: số điểm x số con x giá 1 điểm
-      final dayCapital = (currentPoints * numberOfNumbers * costPerPoint).round();
-      sequenceCapital += dayCapital;
-      totalCapital += dayCapital;
-      sequenceLength++;
-
-      // Ngày sau gấp đôi điểm
-      currentPoints = (currentPoints * multiplier).round();
-    } else {
-      // WIN: Kết thúc chuỗi LOSE (nếu có)
-      if (sequenceStartIndex != -1) {
-        // Tính profit khi WIN
-        final winPoints = currentPoints;
-        final winAmount = (winPoints * numberOfNumbers * payoutPerPoint).round();
-        final profit = winAmount - sequenceCapital;
-
-        loseSequences.add({
-          'start': sequenceStartIndex,
-          'length': sequenceLength,
-          'capital': sequenceCapital,
-          'winPoints': winPoints,
-          'winAmount': winAmount,
-          'profit': profit,
-        });
-
-        totalProfit += profit;
-        totalLoseSequences++;
-
-        if (sequenceLength > maxLoseSequenceLength) {
-          maxLoseSequenceLength = sequenceLength;
-        }
-        if (sequenceCapital > maxCapitalInSequence) {
-          maxCapitalInSequence = sequenceCapital;
-        }
-
-        // Reset để bắt đầu chuỗi mới
-        sequenceStartIndex = -1;
-        currentPoints = initialPoints;
-      }
-    }
-  }
-
-  // Xử lý chuỗi LOSE cuối cùng (nếu cầu đang LOSE)
-  if (sequenceStartIndex != -1) {
-    loseSequences.add({
-      'start': sequenceStartIndex,
-      'length': sequenceLength,
-      'capital': sequenceCapital,
-      'winPoints': currentPoints, // Điểm sẽ đánh ngày tiếp theo
-      'winAmount': 0, // Chưa thắng
-      'profit': -sequenceCapital, // Đang lỗ
-    });
-    totalLoseSequences++;
-    if (sequenceLength > maxLoseSequenceLength) {
-      maxLoseSequenceLength = sequenceLength;
-    }
-    if (sequenceCapital > maxCapitalInSequence) {
-      maxCapitalInSequence = sequenceCapital;
-    }
-  }
-
-  // In kết quả
-  print('\n📊 KẾT QUẢ MÔ PHỎNG:');
-  print('  Tổng số chuỗi LOSE: $totalLoseSequences');
-  print('  Chuỗi LOSE dài nhất: $maxLoseSequenceLength ngày');
-  print('  Vốn lớn nhất trong 1 chuỗi: ${maxCapitalInSequence.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  Tổng vốn đã bỏ ra: ${totalCapital.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  Tổng profit: ${totalProfit.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-
-  // In chi tiết các chuỗi LOSE
-  if (loseSequences.isNotEmpty) {
-    print('\n📋 CHI TIẾT CÁC CHUỖI LOSE:');
-    for (int i = 0; i < loseSequences.length && i < 10; i++) {
-      final seq = loseSequences[i];
-      print('  Chuỗi ${i + 1}: ${seq['length']} ngày LOSE');
-      print('    Vốn bỏ ra: ${seq['capital'].toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-      if (seq['winAmount'] > 0) {
-        print('    Điểm đánh khi WIN: ${seq['winPoints']} điểm/con');
-        print('    Tiền thắng: ${seq['winAmount'].toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-        print('    Profit: ${seq['profit'].toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-      } else {
-        print('    ⚠️ Chuỗi chưa kết thúc (đang LOSE)');
-        print('    Điểm sẽ đánh ngày tiếp theo: ${seq['winPoints']} điểm/con');
-      }
-      print('');
-    }
-    if (loseSequences.length > 10) {
-      print('  ... và ${loseSequences.length - 10} chuỗi khác');
-    }
-  }
-
-  // =======================
-  // CHIẾN LƯỢC TĂNG DẦN ĐỀU: Mỗi ngày tăng thêm 5 điểm cho cả 3 con
-  // =======================
-  const int incrementPoints = 5; // Mỗi ngày tăng thêm 5 điểm tổng
-  const int maxDays = 5; // Tính toán cho 5 ngày
-
-  print('\n💰 CHIẾN LƯỢC TĂNG DẦN ĐỀU (Mỗi ngày +$incrementPoints điểm cho cả 3 con):');
-  print('============================================================');
-  print('  Điểm ban đầu: $initialPoints điểm tổng cho cả 3 con');
-  print('  Mỗi ngày tăng: +$incrementPoints điểm tổng');
-  print('  Số con đánh: $numberOfNumbers con (91, 92, 93)');
-  print('  Tính toán cho: $maxDays ngày');
-
-  // Tính vốn và lợi nhuận cho từng ngày
-  int totalCapitalIncremental = 0;
-  int totalWinAmountIncremental = 0;
-  final List<Map<String, dynamic>> dayDetails = [];
-
-  for (int day = 1; day <= maxDays; day++) {
-    // Tổng điểm cho cả 3 con
-    final totalPoints = initialPoints + (day - 1) * incrementPoints;
-    // Chia đều cho 3 con
-    final pointsPerNumber = totalPoints / numberOfNumbers;
-    
-    // Vốn = tổng điểm * giá 1 điểm
-    final dayCapital = (totalPoints * costPerPoint).round();
-    // Tiền thắng = số điểm của con trúng * tiền thắng 1 điểm
-    // Giả định trúng 1 con (trường hợp tối thiểu)
-    final dayWinAmount = (pointsPerNumber * payoutPerPoint).round();
-    final dayProfit = dayWinAmount - dayCapital;
-
-    totalCapitalIncremental += dayCapital;
-    totalWinAmountIncremental += dayWinAmount;
-
-    dayDetails.add({
-      'day': day,
-      'totalPoints': totalPoints,
-      'pointsPerNumber': pointsPerNumber,
-      'capital': dayCapital,
-      'winAmount': dayWinAmount,
-      'profit': dayProfit,
-    });
-  }
-
-  final totalProfitIncremental = totalWinAmountIncremental - totalCapitalIncremental;
-
-  print('\n📊 CHI TIẾT TỪNG NGÀY:');
-  for (final dayInfo in dayDetails) {
-    print('  Ngày ${dayInfo['day']}:');
-    print('    Tổng điểm cho 3 con: ${dayInfo['totalPoints']} điểm');
-    print('    Điểm/con: ${(dayInfo['pointsPerNumber'] as double).toStringAsFixed(2)} điểm');
-    print('    Vốn: ${dayInfo['capital'].toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-    print('    Tiền thắng (nếu trúng 1 con): ${dayInfo['winAmount'].toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-    print('    Profit (nếu trúng 1 con): ${dayInfo['profit'].toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-    print('');
-  }
-
-  print('\n📈 TRƯỜNG HỢP TỐT NHẤT: Trúng tối thiểu 1 con mỗi ngày trong $maxDays ngày');
-  print('  Tổng vốn: ${totalCapitalIncremental.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  Tổng tiền thắng (trúng 1 con mỗi ngày): ${totalWinAmountIncremental.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  Tổng profit: ${totalProfitIncremental.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  ROI: ${totalCapitalIncremental > 0 ? ((totalProfitIncremental / totalCapitalIncremental) * 100).toStringAsFixed(2) : 0}%');
-
-  print('\n📉 TRƯỜNG HỢP XẤU NHẤT: Lose tất cả trong $maxDays ngày');
-  print('  Tổng vốn (tổng tiền thua): ${totalCapitalIncremental.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  Tổng tiền thắng: 0 VNĐ');
-  print('  Tổng lỗ: -${totalCapitalIncremental.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-
-  // Mô phỏng với dữ liệu thực tế: Tính profit nếu áp dụng chiến lược này
-  int actualCapital = 0;
-  int actualWinAmount = 0;
-  int currentDayInSequence = 0;
-
-  for (int i = 0; i < cauBoth.history.length; i++) {
-    final isWin = cauBoth.history[i];
-    final hitCount = hitCounts[i]; // Số con trúng thực tế
-
-    if (!isWin) {
-      // LOSE: Tăng ngày trong chuỗi
-      currentDayInSequence++;
-      if (currentDayInSequence <= maxDays) {
-        // Tổng điểm cho cả 3 con
-        final totalPoints = initialPoints + (currentDayInSequence - 1) * incrementPoints;
-        // Vốn = tổng điểm * giá 1 điểm
-        final dayCapital = (totalPoints * costPerPoint).round();
-        actualCapital += dayCapital;
-      }
-    } else {
-      // WIN: Tính tiền thắng và reset
-      if (currentDayInSequence > 0 && currentDayInSequence <= maxDays) {
-        // Tổng điểm cho cả 3 con
-        final totalPoints = initialPoints + (currentDayInSequence - 1) * incrementPoints;
-        // Điểm mỗi con
-        final pointsPerNumber = totalPoints / numberOfNumbers;
-        // Tiền thắng = số điểm của con trúng × số con trúng × tiền thắng 1 điểm
-        final dayWinAmount = (pointsPerNumber * hitCount * payoutPerPoint).round();
-        actualWinAmount += dayWinAmount;
-      }
-      currentDayInSequence = 0;
-    }
-  }
-
-  // Xử lý chuỗi LOSE cuối cùng (nếu đang LOSE)
-  if (currentDayInSequence > 0 && currentDayInSequence <= maxDays) {
-    // Chưa thắng, chỉ tính vốn
-  }
-
-  final actualProfit = actualWinAmount - actualCapital;
-
-  print('\n🎯 MÔ PHỎNG VỚI DỮ LIỆU THỰC TẾ:');
-  print('  Tổng vốn đã bỏ ra: ${actualCapital.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  Tổng tiền thắng: ${actualWinAmount.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  Tổng profit: ${actualProfit.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} VNĐ');
-  print('  ROI: ${actualCapital > 0 ? ((actualProfit / actualCapital) * 100).toStringAsFixed(2) : 0}%');
 
   // =======================
   // THỐNG KÊ SỐ CÓ ĐẦU 9 (90-99) TRONG OTHERS
@@ -414,19 +156,26 @@ void main() async {
   }
 
   // =======================
-  // BÀI TEST SO SÁNH: TÌM CẶP SỐ ĐẦU 9 CÓ CẦU LOSE NGẮN NHẤT
+  // BÀI TEST SO SÁNH: TÌM CẶP SỐ CÓ CẦU LOSE NGẮN NHẤT (00-99)
   // =======================
-  print('\n\n🔬 BÀI TEST SO SÁNH: TÌM CẶP SỐ ĐẦU 9 CÓ CẦU LOSE NGẮN NHẤT');
+  print('\n\n🔬 BÀI TEST SO SÁNH: TÌM CẶP SỐ CÓ CẦU LOSE NGẮN NHẤT (00-99)');
   print('============================================================');
+  print('  Đang tính toán... (Có thể mất vài giây)');
   
-  final List<int> firstNineNumbers = List.generate(10, (i) => 90 + i); // 90-99
+  final List<int> allNumbers = List.generate(100, (i) => i); // 00-99
   final List<Map<String, dynamic>> pairStats = [];
   
-  // Tạo tất cả các cặp số từ 90-99
-  for (int i = 0; i < firstNineNumbers.length; i++) {
-    for (int j = i + 1; j < firstNineNumbers.length; j++) {
-      final num1 = firstNineNumbers[i];
-      final num2 = firstNineNumbers[j];
+  // Tạo tất cả các cặp số từ 00-99
+  int totalPairs = 0;
+  for (int i = 0; i < allNumbers.length; i++) {
+    for (int j = i + 1; j < allNumbers.length; j++) {
+      totalPairs++;
+      if (totalPairs % 500 == 0) {
+        print('  Đã xử lý: $totalPairs/4950 cặp...');
+      }
+      
+      final num1 = allNumbers[i];
+      final num2 = allNumbers[j];
       
       // Tính thống kê cầu cho cặp số này
       final cauPair = CauStat();
@@ -454,6 +203,7 @@ void main() async {
   }
   
   // Sắp xếp theo max lose streak tăng dần (ngắn nhất trước)
+  print('  Đang sắp xếp kết quả...');
   pairStats.sort((a, b) {
     // Ưu tiên max lose streak ngắn nhất
     if (a['maxLoseStreak'] != b['maxLoseStreak']) {
@@ -471,16 +221,20 @@ void main() async {
   });
   
   print('  Tổng số cặp số được test: ${pairStats.length}');
-  print('  (Tất cả các cặp từ 90-99)');
+  print('  (Tất cả các cặp từ 00-99)');
   print('');
   
-  // Hiển thị top 10 cặp có max lose streak ngắn nhất
-  print('🏆 TOP 10 CẶP SỐ CÓ CẦU LOSE NGẮN NHẤT:');
+  // Tìm min max lose streak
+  final minMaxLoseStreak = pairStats.isNotEmpty ? pairStats[0]['maxLoseStreak'] as int : 0;
+  final bestPairs = pairStats.where((p) => (p['maxLoseStreak'] as int) == minMaxLoseStreak).toList();
+  
+  // Hiển thị top 20 cặp có max lose streak ngắn nhất
+  print('🏆 TOP 20 CẶP SỐ CÓ CẦU LOSE NGẮN NHẤT:');
   print('============================================================');
   print('  ${'Cặp số'.padRight(10)} | ${'Max LOSE'.padRight(10)} | ${'Max WIN'.padRight(10)} | ${'Winrate'.padRight(10)} | ${'Hiện tại'.padRight(15)}');
   print('  ${'-' * 10} | ${'-' * 10} | ${'-' * 10} | ${'-' * 10} | ${'-' * 15}');
   
-  final topN = pairStats.length < 10 ? pairStats.length : 10;
+  final topN = pairStats.length < 20 ? pairStats.length : 20;
   for (int i = 0; i < topN; i++) {
     final stat = pairStats[i];
     final num1 = stat['num1'] as int;
@@ -492,6 +246,25 @@ void main() async {
     
     final pairStr = '${num1.toString().padLeft(2, '0')}-${num2.toString().padLeft(2, '0')}';
     print('  ${pairStr.padRight(10)} | ${maxLose.toString().padLeft(10)} | ${maxWin.toString().padLeft(10)} | ${winrate.toStringAsFixed(2).padLeft(9)}% | ${currentState.padLeft(15)}');
+  }
+  
+  // Hiển thị số lượng cặp có cùng max lose streak ngắn nhất
+  if (bestPairs.isNotEmpty) {
+    print('\n📊 TỔNG KẾT:');
+    print('  Max LOSE ngắn nhất: $minMaxLoseStreak');
+    print('  Số cặp có Max LOSE = $minMaxLoseStreak: ${bestPairs.length} cặp');
+    if (bestPairs.length <= 50) {
+      print('\n  Danh sách tất cả các cặp có Max LOSE = $minMaxLoseStreak:');
+      for (final pair in bestPairs) {
+        final num1 = pair['num1'] as int;
+        final num2 = pair['num2'] as int;
+        final winrate = pair['winrate'] as double;
+        final pairStr = '${num1.toString().padLeft(2, '0')}-${num2.toString().padLeft(2, '0')}';
+        print('    $pairStr (Winrate: ${winrate.toStringAsFixed(2)}%)');
+      }
+    } else {
+      print('  (Có quá nhiều cặp, chỉ hiển thị top 20 ở trên)');
+    }
   }
   
   // Hiển thị chi tiết cặp tốt nhất
