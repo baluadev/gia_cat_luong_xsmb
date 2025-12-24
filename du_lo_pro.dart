@@ -468,20 +468,6 @@ void main() async {
   }
 
   // Thống kê các số có max lose streak cao nhất
-  print('\n\n🔴 TOP 20 SỐ CÓ MAX LOSE STREAK DÀI NHẤT:');
-  print('============================================================');
-  final top20MaxLose = statsList.take(20).toList();
-  for (int i = 0; i < top20MaxLose.length; i++) {
-    final stat = top20MaxLose[i];
-    final num = stat['number'] as int;
-    final maxLose = stat['maxLoseStreak'] as int;
-    final currentLose = stat['currentLoseStreak'] as int;
-    final winrate = stat['winrate'] as double;
-    final currentState = stat['currentState'] as String;
-    
-    print('  ${(i + 1).toString().padLeft(2)}. Số ${num.toString().padLeft(2, '0')}: Max LOSE = $maxLose, LOSE hiện tại = ${currentLose > 0 ? currentLose : 0}, Winrate = ${winrate.toStringAsFixed(2)}%, ${currentState}');
-  }
-
   // Thống kê các số đang lose hiện tại
   final currentlyLosing = statsList.where((s) => (s['isCurrentlyLosing'] as bool)).toList();
   currentlyLosing.sort((a, b) => (b['currentLoseStreak'] as int).compareTo(a['currentLoseStreak'] as int));
@@ -504,101 +490,6 @@ void main() async {
       final numStr = num.toString().padLeft(2, '0');
       print('  ${numStr.padRight(5)} | ${currentLose.toString().padLeft(15)} | ${maxLose.toString().padLeft(10)} | ${winrate.toStringAsFixed(2).padLeft(9)}% | ${currentState.padLeft(15)}');
     }
-  }
-
-  // Thống kê TopN max lose (max1, max2, max3, max4, max5) và max lose hay lặp lại nhiều nhất cho tất cả các số từ 00-99
-  print('\n\n🏆 TOPN MAX LOSE (MAX1, MAX2, MAX3, MAX4, MAX5) VÀ MAX LOSE HAY LẶP LẠI NHIỀU NHẤT CỦA TẤT CẢ CÁC SỐ (00-99):');
-  print('============================================================');
-  // Sắp xếp lại theo số tăng dần
-  final allNumbersSorted = List<Map<String, dynamic>>.from(statsList);
-  allNumbersSorted.sort((a, b) {
-    // Ưu tiên sắp xếp theo số tăng dần (00, 01, 02, ...)
-    return (a['number'] as int).compareTo(b['number'] as int);
-  });
-  
-  print('  ${'Số'.padRight(5)} | ${'LOSE hiện tại'.padRight(15)} | ${'MAX1'.padRight(8)} | ${'MAX2'.padRight(8)} | ${'MAX3'.padRight(8)} | ${'MAX4'.padRight(8)} | ${'MAX5'.padRight(8)} | ${'Max lose lặp lại'.padRight(70)} | ${'Dây cầu gần nhất'.padRight(25)} | ${'Winrate'.padRight(10)}');
-  print('  ${'-' * 5} | ${'-' * 15} | ${'-' * 8} | ${'-' * 8} | ${'-' * 8} | ${'-' * 8} | ${'-' * 8} | ${'-' * 70} | ${'-' * 25} | ${'-' * 10}');
-  
-  for (final stat in allNumbersSorted) {
-    final num = stat['number'] as int;
-    final currentLose = stat['currentLoseStreak'] as int;
-    final max1 = stat['max1'] as int;
-    final max2 = stat['max2'] as int;
-    final max3 = stat['max3'] as int;
-    final max4 = stat['max4'] as int;
-    final max5 = stat['max5'] as int;
-    final maxLoseRepeatStats = stat['maxLoseRepeatStats'] as ({int max1Count, int max2Count, int max3Count, int max4Count, int max5Count, int totalCount});
-    final nearestLoseStreak = stat['nearestLoseStreak'] as ({int length, int daysAgo, bool isCurrent})?;
-    final winrate = stat['winrate'] as double;
-    
-    final numStr = num.toString().padLeft(2, '0');
-    final max1Str = max1 > 0 ? max1.toString() : '-';
-    final max2Str = max2 > 0 ? max2.toString() : '-';
-    final max3Str = max3 > 0 ? max3.toString() : '-';
-    final max4Str = max4 > 0 ? max4.toString() : '-';
-    final max5Str = max5 > 0 ? max5.toString() : '-';
-    
-    String repeatedStr;
-    if (maxLoseRepeatStats.totalCount > 0) {
-      final parts = <String>[];
-      parts.add('Tổng: ${maxLoseRepeatStats.totalCount}');
-      if (max1 > 0 && maxLoseRepeatStats.max1Count > 0) {
-        final percentage = (maxLoseRepeatStats.max1Count / maxLoseRepeatStats.totalCount * 100).toStringAsFixed(1);
-        parts.add('Max1: ${maxLoseRepeatStats.max1Count}($percentage%)');
-      }
-      if (max2 > 0 && maxLoseRepeatStats.max2Count > 0) {
-        final percentage = (maxLoseRepeatStats.max2Count / maxLoseRepeatStats.totalCount * 100).toStringAsFixed(1);
-        parts.add('Max2: ${maxLoseRepeatStats.max2Count}($percentage%)');
-      }
-      if (max3 > 0 && maxLoseRepeatStats.max3Count > 0) {
-        final percentage = (maxLoseRepeatStats.max3Count / maxLoseRepeatStats.totalCount * 100).toStringAsFixed(1);
-        parts.add('Max3: ${maxLoseRepeatStats.max3Count}($percentage%)');
-      }
-      if (max4 > 0 && maxLoseRepeatStats.max4Count > 0) {
-        final percentage = (maxLoseRepeatStats.max4Count / maxLoseRepeatStats.totalCount * 100).toStringAsFixed(1);
-        parts.add('Max4: ${maxLoseRepeatStats.max4Count}($percentage%)');
-      }
-      if (max5 > 0 && maxLoseRepeatStats.max5Count > 0) {
-        final percentage = (maxLoseRepeatStats.max5Count / maxLoseRepeatStats.totalCount * 100).toStringAsFixed(1);
-        parts.add('Max5: ${maxLoseRepeatStats.max5Count}($percentage%)');
-      }
-      repeatedStr = parts.join(', ');
-    } else {
-      repeatedStr = '-';
-    }
-    
-    String cauStr;
-    if (nearestLoseStreak != null) {
-      if (nearestLoseStreak.isCurrent) {
-        cauStr = 'LOSE ${nearestLoseStreak.length} - Đang trong';
-      } else {
-        cauStr = 'LOSE ${nearestLoseStreak.length} - ${nearestLoseStreak.daysAgo} ngày trước';
-      }
-    } else {
-      cauStr = 'Chưa có dây LOSE';
-    }
-    
-    final currentLoseStr = currentLose > 0 ? currentLose.toString() : '-';
-    print('  ${numStr.padRight(5)} | ${currentLoseStr.padLeft(15)} | ${max1Str.padLeft(8)} | ${max2Str.padLeft(8)} | ${max3Str.padLeft(8)} | ${max4Str.padLeft(8)} | ${max5Str.padLeft(8)} | ${repeatedStr.padLeft(70)} | ${cauStr.padLeft(25)} | ${winrate.toStringAsFixed(2).padLeft(9)}%');
-  }
-
-  // Thống kê phân bố max lose streak
-  final Map<int, int> maxLoseDistribution = {};
-  for (final stat in statsList) {
-    final maxLose = stat['maxLoseStreak'] as int;
-    maxLoseDistribution[maxLose] = (maxLoseDistribution[maxLose] ?? 0) + 1;
-  }
-  
-  print('\n\n📊 PHÂN BỐ MAX LOSE STREAK:');
-  print('============================================================');
-  final sortedDistribution = maxLoseDistribution.entries.toList()
-    ..sort((a, b) => b.key.compareTo(a.key));
-  
-  for (final entry in sortedDistribution) {
-    final streak = entry.key;
-    final count = entry.value;
-    final percentage = (count / statsList.length * 100);
-    print('  Max LOSE = ${streak.toString().padLeft(2)}: $count số (${percentage.toStringAsFixed(1)}%)');
   }
 
   // Thống kê cặp 2 số xuất hiện cùng ngày có max lose streak thấp nhất
@@ -653,26 +544,45 @@ void main() async {
     }
   }
   
-  // Chuyển đổi thành list và sắp xếp theo max lose streak thấp nhất
+  // Chuyển đổi thành list và tính toán các thống kê
   final List<Map<String, dynamic>> pair2List = [];
   for (final entry in pair2Stats.entries) {
     final stat = entry.value;
     if (stat.totalDays > 0) { // Chỉ lấy các cặp đã có dữ liệu
-      final nearestMaxLose = stat.getNearestMaxLoseReached();
       final maxHistory = stat.getMaxHitHistory();
       
-      // Đếm số lần chạm Max1, Max2, Max3
-      int max1HitCount = 0;
-      int max2HitCount = 0;
-      int max3HitCount = 0;
+      // Đếm số lần xuất hiện của mỗi max level
+      final Map<int, int> maxLevelHitCount = {}; // Map<maxLevel, count>
       
       for (final hit in maxHistory) {
-        if (hit.maxLevel == 1) max1HitCount++;
-        if (hit.maxLevel == 2) max2HitCount++;
-        if (hit.maxLevel == 3) max3HitCount++;
+        maxLevelHitCount[hit.maxLevel] = (maxLevelHitCount[hit.maxLevel] ?? 0) + 1;
       }
       
-      final totalMaxHits = max1HitCount + max2HitCount + max3HitCount;
+      // Lấy top 3 max levels có số lần xuất hiện nhiều nhất
+      final top3MaxHits = maxLevelHitCount.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final top3MaxHitsList = top3MaxHits.take(3).toList();
+      
+      // Tính độ dài trung bình của mỗi max level từ maxHistory (thay vì lấy từ topNLose)
+      final Map<int, int> maxLevelLength = {}; // Map<maxLevel, averageLength>
+      for (final level in maxLevelHitCount.keys) {
+        // Lấy tất cả các lần chạm max của level này
+        final hitsForLevel = maxHistory.where((hit) => hit.maxLevel == level).toList();
+        if (hitsForLevel.isNotEmpty) {
+          // Tính độ dài trung bình (làm tròn)
+          final totalLength = hitsForLevel.fold<int>(0, (sum, hit) => sum + hit.length);
+          final avgLength = (totalLength / hitsForLevel.length).round();
+          maxLevelLength[level] = avgLength;
+        }
+      }
+      
+      // Tính khoảng cách giữa currentLose và maxLose (để sắp xếp)
+      final distanceToMax = (stat.currentLoseStreak - stat.maxLoseStreak).abs();
+      
+      // Tìm lần chạm max gần nhất (daysAgo nhỏ nhất)
+      final nearestMaxHit = maxHistory.isNotEmpty 
+          ? maxHistory.reduce((a, b) => a.daysAgo < b.daysAgo ? a : b)
+          : null;
       
       pair2List.add({
         'pair': entry.key,
@@ -683,92 +593,82 @@ void main() async {
         'winrate': stat.winrate,
         'cauString': stat.cauString,
         'currentState': stat.currentState,
-        'nearestMaxLose': nearestMaxLose,
-        'max1HitCount': max1HitCount,
-        'totalMaxHits': totalMaxHits,
+        'maxLevelHitCount': maxLevelHitCount, // Map<maxLevel, count>
+        'maxLevelLength': maxLevelLength, // Map<maxLevel, length> - độ dài lose streak
+        'top3MaxHits': top3MaxHitsList, // List<MapEntry<maxLevel, count>>
+        'distanceToMax': distanceToMax,
+        'nearestMaxHit': nearestMaxHit, // Lần chạm max gần nhất
       });
     }
   }
   
-  // Sắp xếp theo max lose streak tăng dần (thấp nhất trước)
+  // Sắp xếp theo tiêu chí: lose ngắn nhất, lose hiện tại gần với lose ngắn nhất, số lần xuất hiện nhiều nhất
   pair2List.sort((a, b) {
     final maxLoseA = a['maxLoseStreak'] as int;
     final maxLoseB = b['maxLoseStreak'] as int;
+    
+    // 1. Ưu tiên lose ngắn nhất (maxLoseStreak thấp nhất)
     if (maxLoseA != maxLoseB) {
       return maxLoseA.compareTo(maxLoseB);
     }
-    // Nếu bằng nhau, sắp xếp theo current lose streak
-    return (a['currentLoseStreak'] as int).compareTo(b['currentLoseStreak'] as int);
+    
+    // 2. Nếu bằng nhau, ưu tiên lose hiện tại gần với lose ngắn nhất (distanceToMax nhỏ nhất)
+    final distanceA = a['distanceToMax'] as int;
+    final distanceB = b['distanceToMax'] as int;
+    if (distanceA != distanceB) {
+      return distanceA.compareTo(distanceB);
+    }
+    
+    // 3. Nếu vẫn bằng nhau, ưu tiên số lần xuất hiện nhiều nhất
+    final totalWinsA = a['totalWins'] as int;
+    final totalWinsB = b['totalWins'] as int;
+    return totalWinsB.compareTo(totalWinsA);
   });
   
-  // Hiển thị top 30 cặp có max lose streak thấp nhất
-  print('  ${'Cặp'.padRight(8)} | ${'LOSE hiện tại'.padRight(15)} | ${'Max LOSE'.padRight(10)} | ${'Số lần xuất hiện'.padRight(18)} | ${'Max1(lần/tổng)'.padRight(20)} | ${'Winrate'.padRight(10)} | ${'Dây cầu lose gần nhất'.padRight(25)} | ${'Cầu hiện tại'.padRight(20)}');
-  print('  ${'-' * 8} | ${'-' * 15} | ${'-' * 10} | ${'-' * 18} | ${'-' * 20} | ${'-' * 10} | ${'-' * 25} | ${'-' * 20}');
+  // Hiển thị top 5 cặp theo tiêu chí mới
+  print('  ${'Cặp'.padRight(8)} | ${'LOSE hiện tại'.padRight(15)} | ${'Max LOSE'.padRight(10)} | ${'Số lần xuất hiện'.padRight(18)} | ${'3 Max(n) xuất hiện nhiều nhất'.padRight(35)} | ${'Winrate'.padRight(10)} | ${'Lose đã xuất hiện gần nhất'.padRight(30)} | ${'Cầu hiện tại'.padRight(20)}');
+  print('  ${'-' * 8} | ${'-' * 15} | ${'-' * 10} | ${'-' * 18} | ${'-' * 35} | ${'-' * 10} | ${'-' * 30} | ${'-' * 20}');
   
-  final top30Pairs2 = pair2List.take(30).toList();
-  for (final pair in top30Pairs2) {
+  final top5Pairs2 = pair2List.take(5).toList();
+  for (final pair in top5Pairs2) {
     final pairKey = pair['pair'] as String;
     final currentLose = pair['currentLoseStreak'] as int;
     final maxLose = pair['maxLoseStreak'] as int;
     final totalWins = pair['totalWins'] as int;
     final winrate = pair['winrate'] as double;
     final cauString = pair['cauString'] as String;
-    final nearestMaxLose = pair['nearestMaxLose'] as ({int maxLevel, int length, int daysAgo})?;
-    final max1HitCount = pair['max1HitCount'] as int;
-    final totalMaxHits = pair['totalMaxHits'] as int;
+    final maxLevelHitCount = pair['maxLevelHitCount'] as Map<int, int>;
+    final maxLevelLength = pair['maxLevelLength'] as Map<int, int>;
+    final top3MaxHits = pair['top3MaxHits'] as List<MapEntry<int, int>>;
+    final nearestMaxHit = pair['nearestMaxHit'] as ({int maxLevel, int length, int endIndex, int daysAgo})?;
     
     // Lấy 20 ký tự cuối cùng của cầu để hiển thị
     final cauDisplay = cauString.length > 20 ? '...${cauString.substring(cauString.length - 20)}' : cauString;
     
-    String nearestStr;
-    if (nearestMaxLose != null) {
-      if (nearestMaxLose.daysAgo == 0) {
-        nearestStr = 'MAX${nearestMaxLose.maxLevel} (${nearestMaxLose.length}) - Đang trong';
-      } else {
-        nearestStr = 'MAX${nearestMaxLose.maxLevel} (${nearestMaxLose.length}) - ${nearestMaxLose.daysAgo} ngày trước';
-      }
+    // Tạo chuỗi "3 Max(n) xuất hiện nhiều nhất" - format: Max(n, số lần chạm, dây lose)
+    String top3MaxHitsStr;
+    if (top3MaxHits.isNotEmpty) {
+      top3MaxHitsStr = top3MaxHits.map((e) {
+        final level = e.key;
+        final count = e.value; // số lần chạm
+        final length = maxLevelLength[level] ?? 0; // dây lose (độ dài trung bình)
+        return 'Max($level, $count, $length)';
+      }).join(', ');
     } else {
-      nearestStr = 'Chưa chạp đến MAX';
+      top3MaxHitsStr = '-';
     }
     
-    String max1RatioStr;
-    if (totalMaxHits > 0) {
-      max1RatioStr = 'Max1($max1HitCount/$totalMaxHits)';
+    // Tạo chuỗi "Lose đã xuất hiện gần nhất" - format: Max(n, số lần chạm, dây lose)
+    String loseAppearedStr;
+    if (nearestMaxHit != null) {
+      final count = maxLevelHitCount[nearestMaxHit.maxLevel] ?? 0; // số lần chạm
+      loseAppearedStr = 'Max(${nearestMaxHit.maxLevel}, $count, ${nearestMaxHit.length})';
     } else {
-      max1RatioStr = '-';
+      loseAppearedStr = '-';
     }
     
-    print('  ${pairKey.padRight(8)} | ${currentLose.toString().padLeft(15)} | ${maxLose.toString().padLeft(10)} | ${totalWins.toString().padLeft(18)} | ${max1RatioStr.padLeft(20)} | ${winrate.toStringAsFixed(2).padLeft(9)}% | ${nearestStr.padLeft(25)} | ${cauDisplay.padLeft(20)}');
+    print('  ${pairKey.padRight(8)} | ${currentLose.toString().padLeft(15)} | ${maxLose.toString().padLeft(10)} | ${totalWins.toString().padLeft(18)} | ${top3MaxHitsStr.padLeft(35)} | ${winrate.toStringAsFixed(2).padLeft(9)}% | ${loseAppearedStr.padLeft(30)} | ${cauDisplay.padLeft(20)}');
     
-    // Debug cho tất cả các cặp trong top 30
-    if (pair2Stats.containsKey(pairKey) && pair2FirstAppearIndex.containsKey(pairKey)) {
-      final stat = pair2Stats[pairKey]!;
-      final firstAppearDayIndex = pair2FirstAppearIndex[pairKey]!;
-      final totalDays = stat.totalDays;
-      final totalWinsDebug = stat.totalWins;
-      
-      // Tìm tất cả các ngày xuất hiện
-      final List<String> appearDates = [];
-      for (int i = 0; i < stat.history.length; i++) {
-        if (stat.history[i]) {
-          // Map history index sang sortedData index
-          // firstAppearDayIndex là index trong sortedData của ngày đầu tiên cặp xuất hiện
-          // history[0] tương ứng với sortedData[firstAppearDayIndex]
-          // Vậy history[i] tương ứng với sortedData[firstAppearDayIndex + i]
-          final sortedDataIndex = firstAppearDayIndex + i;
-          if (sortedDataIndex < sortedData.length) {
-            final date = sortedData[sortedDataIndex].date.split(' ').first;
-            appearDates.add(date);
-          }
-        }
-      }
-      
-      print('    [DEBUG $pairKey] Tổng số ngày: $totalDays, Số lần xuất hiện: $totalWinsDebug');
-      print('    [DEBUG $pairKey] LOSE hiện tại: $currentLose, Max LOSE: $maxLose');
-      print('    [DEBUG $pairKey] History length: ${stat.history.length}, Total days in data: ${sortedData.length}');
-      print('    [DEBUG $pairKey] Tất cả các ngày xuất hiện (${appearDates.length} ngày): ${appearDates.join(', ')}');
-      print('    [DEBUG $pairKey] Cầu 50 ký tự cuối: ${stat.cauString.length > 50 ? stat.cauString.substring(stat.cauString.length - 50) : stat.cauString}');
-    }
   }
 
   // Thống kê cặp 3 số xuất hiện cùng ngày có max lose streak thấp nhất
@@ -828,12 +728,46 @@ void main() async {
     }
   }
   
-  // Chuyển đổi thành list và sắp xếp theo max lose streak thấp nhất
+  // Chuyển đổi thành list và tính toán các thống kê
   final List<Map<String, dynamic>> pair3List = [];
   for (final entry in pair3Stats.entries) {
     final stat = entry.value;
     if (stat.totalDays > 0) { // Chỉ lấy các cặp đã có dữ liệu
-      final nearestMaxLose = stat.getNearestMaxLoseReached();
+      final maxHistory = stat.getMaxHitHistory();
+      
+      // Đếm số lần xuất hiện của mỗi max level
+      final Map<int, int> maxLevelHitCount = {}; // Map<maxLevel, count>
+      
+      for (final hit in maxHistory) {
+        maxLevelHitCount[hit.maxLevel] = (maxLevelHitCount[hit.maxLevel] ?? 0) + 1;
+      }
+      
+      // Lấy top 3 max levels có số lần xuất hiện nhiều nhất
+      final top3MaxHits = maxLevelHitCount.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final top3MaxHitsList = top3MaxHits.take(3).toList();
+      
+      // Tính độ dài trung bình của mỗi max level từ maxHistory (thay vì lấy từ topNLose)
+      final Map<int, int> maxLevelLength = {}; // Map<maxLevel, averageLength>
+      for (final level in maxLevelHitCount.keys) {
+        // Lấy tất cả các lần chạm max của level này
+        final hitsForLevel = maxHistory.where((hit) => hit.maxLevel == level).toList();
+        if (hitsForLevel.isNotEmpty) {
+          // Tính độ dài trung bình (làm tròn)
+          final totalLength = hitsForLevel.fold<int>(0, (sum, hit) => sum + hit.length);
+          final avgLength = (totalLength / hitsForLevel.length).round();
+          maxLevelLength[level] = avgLength;
+        }
+      }
+      
+      // Tính khoảng cách giữa currentLose và maxLose (để sắp xếp)
+      final distanceToMax = (stat.currentLoseStreak - stat.maxLoseStreak).abs();
+      
+      // Tìm lần chạm max gần nhất (daysAgo nhỏ nhất)
+      final nearestMaxHit = maxHistory.isNotEmpty 
+          ? maxHistory.reduce((a, b) => a.daysAgo < b.daysAgo ? a : b)
+          : null;
+      
       pair3List.add({
         'pair': entry.key,
         'cauStat': stat,
@@ -843,261 +777,88 @@ void main() async {
         'winrate': stat.winrate,
         'cauString': stat.cauString,
         'currentState': stat.currentState,
-        'nearestMaxLose': nearestMaxLose,
+        'maxLevelHitCount': maxLevelHitCount, // Map<maxLevel, count>
+        'maxLevelLength': maxLevelLength, // Map<maxLevel, length> - độ dài lose streak
+        'top3MaxHits': top3MaxHitsList, // List<MapEntry<maxLevel, count>>
+        'distanceToMax': distanceToMax,
+        'nearestMaxHit': nearestMaxHit, // Lần chạm max gần nhất
       });
     }
   }
   
-  // Sắp xếp theo max lose streak tăng dần (thấp nhất trước)
-  pair3List.sort((a, b) {
+  // Lọc chỉ lấy các cặp có số lần xuất hiện >= 15
+  final filteredPair3List = pair3List.where((pair) {
+    final totalWins = pair['totalWins'] as int;
+    return totalWins >= 15;
+  }).toList();
+  
+  // Sắp xếp theo tiêu chí: lose ngắn nhất, lose hiện tại gần với lose ngắn nhất, số lần xuất hiện nhiều nhất
+  filteredPair3List.sort((a, b) {
     final maxLoseA = a['maxLoseStreak'] as int;
     final maxLoseB = b['maxLoseStreak'] as int;
+    
+    // 1. Ưu tiên lose ngắn nhất (maxLoseStreak thấp nhất)
     if (maxLoseA != maxLoseB) {
       return maxLoseA.compareTo(maxLoseB);
     }
-    // Nếu bằng nhau, sắp xếp theo current lose streak
-    return (a['currentLoseStreak'] as int).compareTo(b['currentLoseStreak'] as int);
+    
+    // 2. Nếu bằng nhau, ưu tiên lose hiện tại gần với lose ngắn nhất (distanceToMax nhỏ nhất)
+    final distanceA = a['distanceToMax'] as int;
+    final distanceB = b['distanceToMax'] as int;
+    if (distanceA != distanceB) {
+      return distanceA.compareTo(distanceB);
+    }
+    
+    // 3. Nếu vẫn bằng nhau, ưu tiên số lần xuất hiện nhiều nhất
+    final totalWinsA = a['totalWins'] as int;
+    final totalWinsB = b['totalWins'] as int;
+    return totalWinsB.compareTo(totalWinsA);
   });
   
-  // Hiển thị top 30 cặp có max lose streak thấp nhất
-  print('  ${'Cặp'.padRight(12)} | ${'LOSE hiện tại'.padRight(15)} | ${'Max LOSE'.padRight(10)} | ${'Số lần xuất hiện'.padRight(18)} | ${'Winrate'.padRight(10)} | ${'Dây cầu lose gần nhất'.padRight(25)} | ${'Cầu hiện tại'.padRight(20)}');
-  print('  ${'-' * 12} | ${'-' * 15} | ${'-' * 10} | ${'-' * 18} | ${'-' * 10} | ${'-' * 25} | ${'-' * 20}');
+  // Hiển thị top 5 cặp theo tiêu chí mới (chỉ lấy các cặp có số lần xuất hiện >= 15)
+  print('  ${'Cặp'.padRight(12)} | ${'LOSE hiện tại'.padRight(15)} | ${'Max LOSE'.padRight(10)} | ${'Số lần xuất hiện'.padRight(18)} | ${'3 Max(n) xuất hiện nhiều nhất'.padRight(35)} | ${'Winrate'.padRight(10)} | ${'Lose đã xuất hiện gần nhất'.padRight(30)} | ${'Cầu hiện tại'.padRight(20)}');
+  print('  ${'-' * 12} | ${'-' * 15} | ${'-' * 10} | ${'-' * 18} | ${'-' * 35} | ${'-' * 10} | ${'-' * 30} | ${'-' * 20}');
   
-  final top30Pairs3 = pair3List.take(30).toList();
-  for (final pair in top30Pairs3) {
+  final top5Pairs3 = filteredPair3List.take(5).toList();
+  for (final pair in top5Pairs3) {
     final pairKey = pair['pair'] as String;
     final currentLose = pair['currentLoseStreak'] as int;
     final maxLose = pair['maxLoseStreak'] as int;
     final totalWins = pair['totalWins'] as int;
     final winrate = pair['winrate'] as double;
     final cauString = pair['cauString'] as String;
-    final nearestMaxLose = pair['nearestMaxLose'] as ({int maxLevel, int length, int daysAgo})?;
+    final maxLevelHitCount = pair['maxLevelHitCount'] as Map<int, int>;
+    final maxLevelLength = pair['maxLevelLength'] as Map<int, int>;
+    final top3MaxHits = pair['top3MaxHits'] as List<MapEntry<int, int>>;
+    final nearestMaxHit = pair['nearestMaxHit'] as ({int maxLevel, int length, int endIndex, int daysAgo})?;
     
     // Lấy 20 ký tự cuối cùng của cầu để hiển thị
     final cauDisplay = cauString.length > 20 ? '...${cauString.substring(cauString.length - 20)}' : cauString;
     
-    String nearestStr;
-    if (nearestMaxLose != null) {
-      if (nearestMaxLose.daysAgo == 0) {
-        nearestStr = 'MAX${nearestMaxLose.maxLevel} (${nearestMaxLose.length}) - Đang trong';
-      } else {
-        nearestStr = 'MAX${nearestMaxLose.maxLevel} (${nearestMaxLose.length}) - ${nearestMaxLose.daysAgo} ngày trước';
-      }
+    // Tạo chuỗi "3 Max(n) xuất hiện nhiều nhất" - format: Max(n, số lần chạm, dây lose)
+    String top3MaxHitsStr;
+    if (top3MaxHits.isNotEmpty) {
+      top3MaxHitsStr = top3MaxHits.map((e) {
+        final level = e.key;
+        final count = e.value; // số lần chạm
+        final length = maxLevelLength[level] ?? 0; // dây lose (độ dài trung bình)
+        return 'Max($level, $count, $length)';
+      }).join(', ');
     } else {
-      nearestStr = 'Chưa chạp đến MAX';
+      top3MaxHitsStr = '-';
     }
     
-    print('  ${pairKey.padRight(12)} | ${currentLose.toString().padLeft(15)} | ${maxLose.toString().padLeft(10)} | ${totalWins.toString().padLeft(18)} | ${winrate.toStringAsFixed(2).padLeft(9)}% | ${nearestStr.padLeft(25)} | ${cauDisplay.padLeft(20)}');
+    // Tạo chuỗi "Lose đã xuất hiện gần nhất" - format: Max(n, số lần chạm, dây lose)
+    String loseAppearedStr;
+    if (nearestMaxHit != null) {
+      final count = maxLevelHitCount[nearestMaxHit.maxLevel] ?? 0; // số lần chạm
+      loseAppearedStr = 'Max(${nearestMaxHit.maxLevel}, $count, ${nearestMaxHit.length})';
+    } else {
+      loseAppearedStr = '-';
+    }
     
-    // Debug cho tất cả các cặp trong top 30
-    if (pair3Stats.containsKey(pairKey) && pair3FirstAppearIndex.containsKey(pairKey)) {
-      final stat = pair3Stats[pairKey]!;
-      final firstAppearDayIndex = pair3FirstAppearIndex[pairKey]!;
-      final totalDays = stat.totalDays;
-      final totalWinsDebug = stat.totalWins;
-      
-      // Tìm tất cả các ngày xuất hiện
-      final List<String> appearDates = [];
-      for (int i = 0; i < stat.history.length; i++) {
-        if (stat.history[i]) {
-          // Map history index sang sortedData index
-          // firstAppearDayIndex là index trong sortedData của ngày đầu tiên cặp xuất hiện
-          // history[0] tương ứng với sortedData[firstAppearDayIndex]
-          // Vậy history[i] tương ứng với sortedData[firstAppearDayIndex + i]
-          final sortedDataIndex = firstAppearDayIndex + i;
-          if (sortedDataIndex < sortedData.length) {
-            final date = sortedData[sortedDataIndex].date.split(' ').first;
-            appearDates.add(date);
-          }
-        }
-      }
-      
-      print('    [DEBUG $pairKey] Tổng số ngày: $totalDays, Số lần xuất hiện: $totalWinsDebug');
-      print('    [DEBUG $pairKey] LOSE hiện tại: $currentLose, Max LOSE: $maxLose');
-      print('    [DEBUG $pairKey] History length: ${stat.history.length}, Total days in data: ${sortedData.length}');
-      print('    [DEBUG $pairKey] Tất cả các ngày xuất hiện (${appearDates.length} ngày): ${appearDates.join(', ')}');
-      print('    [DEBUG $pairKey] Cầu 50 ký tự cuối: ${stat.cauString.length > 50 ? stat.cauString.substring(stat.cauString.length - 50) : stat.cauString}');
-    }
-  }
-
-  // Thống kê ngày gần nhất
-  if (sortedData.isNotEmpty) {
-    final latestDay = sortedData.last;
+    print('  ${pairKey.padRight(12)} | ${currentLose.toString().padLeft(15)} | ${maxLose.toString().padLeft(10)} | ${totalWins.toString().padLeft(18)} | ${top3MaxHitsStr.padLeft(35)} | ${winrate.toStringAsFixed(2).padLeft(9)}% | ${loseAppearedStr.padLeft(30)} | ${cauDisplay.padLeft(20)}');
     
-    print('\n\n📅 NGÀY GẦN NHẤT (${latestDay.date.split(' ').first}):');
-    print('============================================================');
-    print('  Các số xuất hiện trong others: ${latestDay.others.map((n) => n.toString().padLeft(2, '0')).join(', ')}');
-    print('  Tổng số: ${latestDay.others.length} số');
-  }
-
-  // Thống kê các cặp 2 số có LOSE hiện tại đã chạm/vượt MAX1
-  print('\n\n🔴 CÁC CẶP 2 SỐ ĐÃ CHẠM MAX1 (Sắp xếp theo số lần chạm MAX1):');
-  print('============================================================');
-  
-  final List<Map<String, dynamic>> hitMaxPairs2 = [];
-  for (final entry in pair2Stats.entries) {
-    final stat = entry.value;
-    if (stat.totalDays > 0 && stat.currentLoseStreak > 0) {
-      final top3Lose = stat.getTopNLoseStreaks(3);
-      if (top3Lose.isNotEmpty) {
-        final max1 = top3Lose[0];
-        final currentLose = stat.currentLoseStreak;
-        
-        // Chỉ kiểm tra MAX1
-        if (currentLose >= max1) {
-          final exceedBy = currentLose - max1;
-          
-          // Chỉ thêm các cặp có vượt quá (exceedBy > 0)
-          if (exceedBy > 0) {
-            // Đếm số lần chạm MAX1 từ lịch sử
-            final maxHistory = stat.getMaxHitHistory();
-            final max1HitCount = maxHistory.where((hit) => hit.maxLevel == 1).length;
-            
-            hitMaxPairs2.add({
-              'pair': entry.key,
-              'currentLose': currentLose,
-              'max1': max1,
-              'exceedBy': exceedBy,
-              'winrate': stat.winrate,
-              'max1HitCount': max1HitCount,
-            });
-          }
-        }
-      }
-    }
-  }
-  
-  // Sắp xếp theo số lần chạm MAX1 giảm dần (nhiều nhất trước)
-  hitMaxPairs2.sort((a, b) {
-    final countA = a['max1HitCount'] as int;
-    final countB = b['max1HitCount'] as int;
-    if (countA != countB) {
-      return countB.compareTo(countA); // Nhiều nhất trước
-    }
-    // Nếu bằng nhau, sắp xếp theo currentLose giảm dần
-    return (b['currentLose'] as int).compareTo(a['currentLose'] as int);
-  });
-  
-  if (hitMaxPairs2.isEmpty) {
-    print('  Không có cặp 2 số nào có LOSE hiện tại vượt quá MAX1');
-  } else {
-    print('  ${'Cặp'.padRight(8)} | ${'Số lần chạm MAX1'.padRight(18)} | ${'LOSE hiện tại'.padRight(15)} | ${'Vượt quá'.padRight(10)} | ${'MAX1'.padRight(8)} | ${'Winrate'.padRight(10)}');
-    print('  ${'-' * 8} | ${'-' * 18} | ${'-' * 15} | ${'-' * 10} | ${'-' * 8} | ${'-' * 10}');
-    
-    final top30HitMax2 = hitMaxPairs2.take(30).toList();
-    for (final pair in top30HitMax2) {
-      final pairKey = pair['pair'] as String;
-      final currentLose = pair['currentLose'] as int;
-      final exceedBy = pair['exceedBy'] as int;
-      final max1 = pair['max1'] as int;
-      final winrate = pair['winrate'] as double;
-      final max1HitCount = pair['max1HitCount'] as int;
-      
-      final exceedStr = '+$exceedBy'; // exceedBy luôn > 0 vì chỉ lấy các cặp có currentLose > max1
-      print('  ${pairKey.padRight(8)} | ${max1HitCount.toString().padLeft(18)} | ${currentLose.toString().padLeft(15)} | ${exceedStr.padLeft(10)} | ${max1.toString().padLeft(8)} | ${winrate.toStringAsFixed(2).padLeft(9)}%');
-    }
-  }
-
-  // Thống kê các cặp 3 số có LOSE hiện tại đã chạm/vượt MAX1
-  print('\n\n🔴 CÁC CẶP 3 SỐ ĐÃ CHẠM MAX1 (Sắp xếp theo số lần chạm MAX1):');
-  print('============================================================');
-  
-  final List<Map<String, dynamic>> hitMaxPairs3 = [];
-  for (final entry in pair3Stats.entries) {
-    final stat = entry.value;
-    if (stat.totalDays > 0 && stat.currentLoseStreak > 0) {
-      final top3Lose = stat.getTopNLoseStreaks(3);
-      if (top3Lose.isNotEmpty) {
-        final max1 = top3Lose[0];
-        final currentLose = stat.currentLoseStreak;
-        
-        // Chỉ kiểm tra MAX1
-        if (currentLose >= max1) {
-          final exceedBy = currentLose - max1;
-          
-          // Chỉ thêm các cặp có vượt quá (exceedBy > 0)
-          if (exceedBy > 0) {
-            // Đếm số lần chạm MAX1 từ lịch sử
-            final maxHistory = stat.getMaxHitHistory();
-            final max1HitCount = maxHistory.where((hit) => hit.maxLevel == 1).length;
-            
-            hitMaxPairs3.add({
-              'pair': entry.key,
-              'currentLose': currentLose,
-              'max1': max1,
-              'exceedBy': exceedBy,
-              'winrate': stat.winrate,
-              'max1HitCount': max1HitCount,
-            });
-          }
-        }
-      }
-    }
-  }
-  
-  // Sắp xếp theo số lần chạm MAX1 giảm dần (nhiều nhất trước)
-  hitMaxPairs3.sort((a, b) {
-    final countA = a['max1HitCount'] as int;
-    final countB = b['max1HitCount'] as int;
-    if (countA != countB) {
-      return countB.compareTo(countA); // Nhiều nhất trước
-    }
-    // Nếu bằng nhau, sắp xếp theo currentLose giảm dần
-    return (b['currentLose'] as int).compareTo(a['currentLose'] as int);
-  });
-  
-  if (hitMaxPairs3.isEmpty) {
-    print('  Không có cặp 3 số nào có LOSE hiện tại vượt quá MAX1');
-  } else {
-    print('  ${'Cặp'.padRight(12)} | ${'Số lần chạm MAX1'.padRight(18)} | ${'LOSE hiện tại'.padRight(15)} | ${'Vượt quá'.padRight(10)} | ${'MAX1'.padRight(8)} | ${'Winrate'.padRight(10)}');
-    print('  ${'-' * 12} | ${'-' * 18} | ${'-' * 15} | ${'-' * 10} | ${'-' * 8} | ${'-' * 10}');
-    
-    final top30HitMax3 = hitMaxPairs3.take(30).toList();
-    for (final pair in top30HitMax3) {
-      final pairKey = pair['pair'] as String;
-      final currentLose = pair['currentLose'] as int;
-      final exceedBy = pair['exceedBy'] as int;
-      final max1 = pair['max1'] as int;
-      final winrate = pair['winrate'] as double;
-      final max1HitCount = pair['max1HitCount'] as int;
-      
-      final exceedStr = '+$exceedBy'; // exceedBy luôn > 0 vì chỉ lấy các cặp có currentLose > max1
-      print('  ${pairKey.padRight(12)} | ${max1HitCount.toString().padLeft(18)} | ${currentLose.toString().padLeft(15)} | ${exceedStr.padLeft(10)} | ${max1.toString().padLeft(8)} | ${winrate.toStringAsFixed(2).padLeft(9)}%');
-      
-      // Debug cho cặp 36-39-58
-      if (pairKey == '36-39-58') {
-        if (pair3Stats.containsKey(pairKey)) {
-          final stat = pair3Stats[pairKey]!;
-          final appearIndices = stat.getAppearIndices();
-          if (appearIndices != null) {
-            final firstAppearDayIndex = appearIndices.firstAppearIndex;
-            final lastAppearDayIndex = appearIndices.lastAppearIndex;
-            final firstAppearDate = firstAppearDayIndex < sortedData.length 
-                ? sortedData[firstAppearDayIndex].date.split(' ').first 
-                : 'N/A';
-            final lastAppearDate = lastAppearDayIndex < sortedData.length 
-                ? sortedData[lastAppearDayIndex].date.split(' ').first 
-                : 'N/A';
-            final totalDays = stat.totalDays;
-            final totalWins = stat.totalWins;
-            
-            // Tính ngày dự kiến nếu lose streak = 181
-            final expectedLastAppearIndex = sortedData.length - 1 - currentLose;
-            final expectedLastAppearDate = expectedLastAppearIndex >= 0 && expectedLastAppearIndex < sortedData.length
-                ? sortedData[expectedLastAppearIndex].date.split(' ').first
-                : 'N/A';
-            
-            print('    [DEBUG 36-39-58] Tổng số ngày: $totalDays, Số lần xuất hiện: $totalWins');
-            print('    [DEBUG 36-39-58] Ngày xuất hiện đầu tiên (index $firstAppearDayIndex): $firstAppearDate');
-            print('    [DEBUG 36-39-58] Ngày xuất hiện gần nhất (index $lastAppearDayIndex): $lastAppearDate');
-            print('    [DEBUG 36-39-58] Ngày dự kiến nếu LOSE=$currentLose (index $expectedLastAppearIndex): $expectedLastAppearDate');
-            print('    [DEBUG 36-39-58] LOSE hiện tại: $currentLose, MAX1: $max1');
-            print('    [DEBUG 36-39-58] History length: ${stat.history.length}, Total days in data: ${sortedData.length}');
-            print('    [DEBUG 36-39-58] Cầu 50 ký tự cuối: ${stat.cauString.length > 50 ? stat.cauString.substring(stat.cauString.length - 50) : stat.cauString}');
-          }
-        }
-      }
-    }
   }
 
   // Nhập và hiển thị lịch sử chạm Max của cặp
@@ -1123,53 +884,74 @@ void main() async {
         if (pair2Stats.containsKey(pairKey)) {
           final stat = pair2Stats[pairKey]!;
           final maxHistory = stat.getMaxHitHistory();
-          final top10Lose = stat.getTopNLoseStreaks(10);
+          final topNLose = stat.getTopNLoseStreaks(20);
+          
+          // Đếm số lần xuất hiện của mỗi max level
+          final Map<int, int> maxLevelHitCount = {};
+          for (final hit in maxHistory) {
+            maxLevelHitCount[hit.maxLevel] = (maxLevelHitCount[hit.maxLevel] ?? 0) + 1;
+          }
+          
+          // Lấy top 3 max levels có số lần xuất hiện nhiều nhất
+          final top3MaxHits = maxLevelHitCount.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
+          final top3MaxHitsList = top3MaxHits.take(3).toList();
+          
+          // Tạo map maxLevelLength từ topNLose
+          final Map<int, int> maxLevelLength = {};
+          for (int i = 0; i < topNLose.length; i++) {
+            maxLevelLength[i + 1] = topNLose[i];
+          }
+          
+          // Tìm lần chạm max gần nhất
+          final nearestMaxHit = maxHistory.isNotEmpty 
+              ? maxHistory.reduce((a, b) => a.daysAgo < b.daysAgo ? a : b)
+              : null;
           
           print('\n  📊 LỊCH SỬ CHẠM MAX CỦA CẶP 2 SỐ: $pairKey');
           print('  ============================================================');
-          print('  Tổng số ngày theo dõi: ${stat.totalDays}');
-          print('  Số lần xuất hiện (W): ${stat.totalWins}');
-          print('  Số lần không xuất hiện (L): ${stat.totalDays - stat.totalWins}');
-          
-          // Hiển thị top 10 max LOSE
-          final maxLoseStr = top10Lose.asMap().entries.map((e) => 'MAX${e.key + 1} = ${e.value}').join(', ');
-          print('  Max LOSE: $maxLoseStr');
-          
           print('  LOSE hiện tại: ${stat.currentLoseStreak}');
-          print('  Winrate: ${stat.winrate.toStringAsFixed(2)}%');
-          print('');
+          print('  Max LOSE: ${stat.maxLoseStreak}');
+          print('  Số lần xuất hiện: ${stat.totalWins}');
           
-          if (maxHistory.isEmpty) {
-            print('  Chưa có lần nào chạm MAX');
+          // Hiển thị 3 Max(n) xuất hiện nhiều nhất - format: Max(n, số lần chạm, dây lose)
+          String top3MaxHitsStr;
+          if (top3MaxHitsList.isNotEmpty) {
+            top3MaxHitsStr = top3MaxHitsList.map((e) {
+              final level = e.key;
+              final count = e.value; // số lần chạm
+              final length = maxLevelLength[level] ?? 0; // dây lose (độ dài trung bình)
+              return 'Max($level, $count, $length)';
+            }).join(', ');
           } else {
-            print('  📈 CÁC LẦN CHẠM MAX (${maxHistory.length} lần):');
-            print('  ${'Lần'.padRight(5)} | ${'Max Level'.padRight(12)} | ${'Độ dài'.padRight(10)} | ${'Số ngày trước'.padRight(15)} | ${'Ngày'.padRight(12)}');
-            print('  ${'-' * 5} | ${'-' * 12} | ${'-' * 10} | ${'-' * 15} | ${'-' * 12}');
+            top3MaxHitsStr = '-';
+          }
+          print('  3 Max(n) xuất hiện nhiều nhất: $top3MaxHitsStr');
+          
+          // Hiển thị Lose đã xuất hiện gần nhất có ngày - format: Max(n, số lần chạm, dây lose)
+          if (nearestMaxHit != null && pair2FirstAppearIndex.containsKey(pairKey)) {
+            final firstAppearIndex = pair2FirstAppearIndex[pairKey]!;
+            // endIndex là index trong history của ngày kết thúc lose streak (ngày có win, sau khi lose streak kết thúc)
+            // Để hiển thị ngày cuối cùng của lose streak: dùng endIndex - 1 (ngày trước ngày có win)
+            // Map từ history sang sortedData index
+            // firstAppearIndex là index trong sortedData của ngày đầu tiên cặp xuất hiện
+            // Vậy sortedDataIndex của ngày cuối cùng lose streak = firstAppearIndex + endIndex - 1
+            final sortedDataIndex = firstAppearIndex + nearestMaxHit.endIndex - 1;
             
-            for (int i = 0; i < maxHistory.length; i++) {
-              final hit = maxHistory[i];
-              final dayIndex = sortedData.length - 1 - hit.daysAgo;
-              final dateStr = dayIndex >= 0 && dayIndex < sortedData.length 
-                  ? sortedData[dayIndex].date.split(' ').first 
-                  : 'N/A';
-              
-              print('  ${(i + 1).toString().padLeft(5)} | MAX${hit.maxLevel}'.padRight(12) + ' | ${hit.length.toString().padLeft(10)} | ${hit.daysAgo.toString().padLeft(15)} | ${dateStr.padLeft(12)}');
+            final count = maxLevelHitCount[nearestMaxHit.maxLevel] ?? 0; // số lần chạm
+            if (sortedDataIndex >= 0 && sortedDataIndex < sortedData.length) {
+              final dateStr = sortedData[sortedDataIndex].date.split(' ').first;
+              print('  Lose đã xuất hiện gần nhất: Max(${nearestMaxHit.maxLevel}, $count, ${nearestMaxHit.length}) - Ngày: $dateStr');
+            } else {
+              print('  Lose đã xuất hiện gần nhất: Max(${nearestMaxHit.maxLevel}, $count, ${nearestMaxHit.length}) - Ngày: N/A');
             }
+          } else {
+            print('  Lose đã xuất hiện gần nhất: -');
           }
           
-          // Hiển thị một số lần xuất hiện gần nhất để kiểm tra
-          print('');
-          print('  📋 MỘT SỐ LẦN XUẤT HIỆN GẦN NHẤT (để kiểm tra):');
+          // Hiển thị Cầu hiện tại (toàn bộ W/L)
           final cauString = stat.cauString;
-          if (cauString.isNotEmpty) {
-            final last30 = cauString.length > 30 ? cauString.substring(cauString.length - 30) : cauString;
-            print('  Cầu 30 ngày gần nhất: $last30');
-            print('  (W = xuất hiện, L = không xuất hiện)');
-            
-            // Đếm số lần W trong 30 ngày gần nhất
-            final wCount = last30.split('').where((c) => c == 'W').length;
-            print('  Số lần xuất hiện trong 30 ngày gần nhất: $wCount');
-          }
+          print('  Cầu hiện tại: $cauString');
         } else {
           print('  ❌ Không tìm thấy cặp 2 số: $pairKey');
         }
@@ -1189,53 +971,74 @@ void main() async {
         if (pair3Stats.containsKey(pairKey)) {
           final stat = pair3Stats[pairKey]!;
           final maxHistory = stat.getMaxHitHistory();
-          final top10Lose = stat.getTopNLoseStreaks(10);
+          final topNLose = stat.getTopNLoseStreaks(20);
+          
+          // Đếm số lần xuất hiện của mỗi max level
+          final Map<int, int> maxLevelHitCount = {};
+          for (final hit in maxHistory) {
+            maxLevelHitCount[hit.maxLevel] = (maxLevelHitCount[hit.maxLevel] ?? 0) + 1;
+          }
+          
+          // Lấy top 3 max levels có số lần xuất hiện nhiều nhất
+          final top3MaxHits = maxLevelHitCount.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
+          final top3MaxHitsList = top3MaxHits.take(3).toList();
+          
+          // Tạo map maxLevelLength từ topNLose
+          final Map<int, int> maxLevelLength = {};
+          for (int i = 0; i < topNLose.length; i++) {
+            maxLevelLength[i + 1] = topNLose[i];
+          }
+          
+          // Tìm lần chạm max gần nhất
+          final nearestMaxHit = maxHistory.isNotEmpty 
+              ? maxHistory.reduce((a, b) => a.daysAgo < b.daysAgo ? a : b)
+              : null;
           
           print('\n  📊 LỊCH SỬ CHẠM MAX CỦA CẶP 3 SỐ: $pairKey');
           print('  ============================================================');
-          print('  Tổng số ngày theo dõi: ${stat.totalDays}');
-          print('  Số lần xuất hiện (W): ${stat.totalWins}');
-          print('  Số lần không xuất hiện (L): ${stat.totalDays - stat.totalWins}');
-          
-          // Hiển thị top 10 max LOSE
-          final maxLoseStr = top10Lose.asMap().entries.map((e) => 'MAX${e.key + 1} = ${e.value}').join(', ');
-          print('  Max LOSE: $maxLoseStr');
-          
           print('  LOSE hiện tại: ${stat.currentLoseStreak}');
-          print('  Winrate: ${stat.winrate.toStringAsFixed(2)}%');
-          print('');
+          print('  Max LOSE: ${stat.maxLoseStreak}');
+          print('  Số lần xuất hiện: ${stat.totalWins}');
           
-          if (maxHistory.isEmpty) {
-            print('  Chưa có lần nào chạm MAX');
+          // Hiển thị 3 Max(n) xuất hiện nhiều nhất - format: Max(n, số lần chạm, dây lose)
+          String top3MaxHitsStr;
+          if (top3MaxHitsList.isNotEmpty) {
+            top3MaxHitsStr = top3MaxHitsList.map((e) {
+              final level = e.key;
+              final count = e.value; // số lần chạm
+              final length = maxLevelLength[level] ?? 0; // dây lose (độ dài trung bình)
+              return 'Max($level, $count, $length)';
+            }).join(', ');
           } else {
-            print('  📈 CÁC LẦN CHẠM MAX (${maxHistory.length} lần):');
-            print('  ${'Lần'.padRight(5)} | ${'Max Level'.padRight(12)} | ${'Độ dài'.padRight(10)} | ${'Số ngày trước'.padRight(15)} | ${'Ngày'.padRight(12)}');
-            print('  ${'-' * 5} | ${'-' * 12} | ${'-' * 10} | ${'-' * 15} | ${'-' * 12}');
+            top3MaxHitsStr = '-';
+          }
+          print('  3 Max(n) xuất hiện nhiều nhất: $top3MaxHitsStr');
+          
+          // Hiển thị Lose đã xuất hiện gần nhất có ngày - format: Max(n, số lần chạm, dây lose)
+          if (nearestMaxHit != null && pair3FirstAppearIndex.containsKey(pairKey)) {
+            final firstAppearIndex = pair3FirstAppearIndex[pairKey]!;
+            // endIndex là index trong history của ngày kết thúc lose streak (ngày có win, sau khi lose streak kết thúc)
+            // Để hiển thị ngày cuối cùng của lose streak: dùng endIndex - 1 (ngày trước ngày có win)
+            // Map từ history sang sortedData index
+            // firstAppearIndex là index trong sortedData của ngày đầu tiên cặp xuất hiện
+            // Vậy sortedDataIndex của ngày cuối cùng lose streak = firstAppearIndex + endIndex - 1
+            final sortedDataIndex = firstAppearIndex + nearestMaxHit.endIndex - 1;
             
-            for (int i = 0; i < maxHistory.length; i++) {
-              final hit = maxHistory[i];
-              final dayIndex = sortedData.length - 1 - hit.daysAgo;
-              final dateStr = dayIndex >= 0 && dayIndex < sortedData.length 
-                  ? sortedData[dayIndex].date.split(' ').first 
-                  : 'N/A';
-              
-              print('  ${(i + 1).toString().padLeft(5)} | MAX${hit.maxLevel}'.padRight(12) + ' | ${hit.length.toString().padLeft(10)} | ${hit.daysAgo.toString().padLeft(15)} | ${dateStr.padLeft(12)}');
+            final count = maxLevelHitCount[nearestMaxHit.maxLevel] ?? 0; // số lần chạm
+            if (sortedDataIndex >= 0 && sortedDataIndex < sortedData.length) {
+              final dateStr = sortedData[sortedDataIndex].date.split(' ').first;
+              print('  Lose đã xuất hiện gần nhất: Max(${nearestMaxHit.maxLevel}, $count, ${nearestMaxHit.length}) - Ngày: $dateStr');
+            } else {
+              print('  Lose đã xuất hiện gần nhất: Max(${nearestMaxHit.maxLevel}, $count, ${nearestMaxHit.length}) - Ngày: N/A');
             }
+          } else {
+            print('  Lose đã xuất hiện gần nhất: -');
           }
           
-          // Hiển thị một số lần xuất hiện gần nhất để kiểm tra
-          print('');
-          print('  📋 MỘT SỐ LẦN XUẤT HIỆN GẦN NHẤT (để kiểm tra):');
+          // Hiển thị Cầu hiện tại (toàn bộ W/L)
           final cauString = stat.cauString;
-          if (cauString.isNotEmpty) {
-            final last30 = cauString.length > 30 ? cauString.substring(cauString.length - 30) : cauString;
-            print('  Cầu 30 ngày gần nhất: $last30');
-            print('  (W = xuất hiện, L = không xuất hiện)');
-            
-            // Đếm số lần W trong 30 ngày gần nhất
-            final wCount = last30.split('').where((c) => c == 'W').length;
-            print('  Số lần xuất hiện trong 30 ngày gần nhất: $wCount');
-          }
+          print('  Cầu hiện tại: $cauString');
         } else {
           print('  ❌ Không tìm thấy cặp 3 số: $pairKey');
         }
