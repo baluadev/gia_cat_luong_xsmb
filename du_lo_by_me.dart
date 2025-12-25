@@ -124,11 +124,11 @@ extension RoiPower on RoiStat {
 
 /// =======================
 /// CONFIG
-/// =======================
+/// =======================git
 const int POINT_PER_NUMBER = 5; // mặc định nếu đánh đều 3 số
 const int COST_PER_POINT = 22500;
 const int PROFIT_PER_HIT_PER_POINT = 80000; // ví dụ lợi nhuận 1 điểm trúng
-const int TOP_N_NUMBERS = 2; // số lượng số top để dự đoán
+const int TOP_N_NUMBERS = 3; // số lượng số top để dự đoán
 const int TOTAL_POINTS_TODAY = 15; // tổng điểm muốn đánh hôm nay
 const int MIN_DE_SAMPLE =
     8; // tối thiểu số lần DE xuất hiện để coi là đủ dữ liệu
