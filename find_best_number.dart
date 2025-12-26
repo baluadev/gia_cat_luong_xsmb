@@ -194,8 +194,9 @@ void main() async {
       await processTriples();
     } else {
       final useOrLogic = input == '1'; // true = 1 trong 2, false = cả 2
+      final isOption1 = input == '1'; // true = Option 1, false = Option 2
       print('Đã chọn: ${useOrLogic ? "1 trong 2 số" : "Cả 2 số"}\n');
-      await processPairs(useOrLogic);
+      await processPairs(useOrLogic, isOption1);
     }
     
     // Hỏi có muốn tiếp tục không
@@ -208,7 +209,7 @@ void main() async {
   print('Đã thoát chương trình.');
 }
 
-Future<void> processPairs(bool useOrLogic) async {
+Future<void> processPairs(bool useOrLogic, bool isOption1) async {
   // Load data
   final data = await loadDataModels('data.csv');
   data.sort((a, b) => DateTime.parse(a.date).compareTo(DateTime.parse(b.date)));
@@ -400,63 +401,161 @@ Future<void> processPairs(bool useOrLogic) async {
       }
     }
     
-    // Tính lại win streak từ history
-    if (pair.history.isNotEmpty) {
-      pair.currentWinStreak = 0;
-      pair.maxWinStreak = 0;
-      
-      int tempWinStreak = 0;
-      for (int i = 0; i < pair.history.length; i++) {
-        if (pair.history[i]) {
-          tempWinStreak++;
-          pair.maxWinStreak = max(pair.maxWinStreak, tempWinStreak);
-        } else {
-          tempWinStreak = 0;
-        }
-      }
-      
-      // Tính current win streak từ cuối
-      for (int i = pair.history.length - 1; i >= 0; i--) {
-        if (pair.history[i]) {
+    // Tính lại win streak từ appearIndices (toàn bộ data, giống lose streak)
+    // Current win streak: đếm từ ngày cuối lên, số ngày liên tiếp xuất hiện
+    pair.currentWinStreak = 0;
+    if (appearIndices.isNotEmpty) {
+      // Đếm từ ngày cuối lên
+      for (int i = data.length - 1; i >= 0; i--) {
+        if (appearIndices.contains(i)) {
           pair.currentWinStreak++;
         } else {
-          break;
+          break; // Dừng khi gặp ngày không xuất hiện
         }
       }
+    }
+    
+    // Tính maxWinStreak: tìm chuỗi dài nhất các ngày liên tiếp xuất hiện
+    pair.maxWinStreak = 0;
+    if (appearIndices.isNotEmpty) {
+      int tempWinStreak = 0;
+      int prevIndex = -2; // Khởi tạo để đảm bảo không trùng với index đầu tiên
+      
+      for (final appearIndex in appearIndices) {
+        if (appearIndex == prevIndex + 1) {
+          // Liên tiếp với lần trước
+          tempWinStreak++;
+        } else {
+          // Không liên tiếp, bắt đầu chuỗi mới
+          pair.maxWinStreak = max(pair.maxWinStreak, tempWinStreak);
+          tempWinStreak = 1;
+        }
+        prevIndex = appearIndex;
+      }
+      // Cập nhật chuỗi cuối cùng
+      pair.maxWinStreak = max(pair.maxWinStreak, tempWinStreak);
     }
   }
   
   // =======================
   // LỌC VÀ SẮP XẾP: TopN cặp số tốt nhất
   // Ưu tiên: MaxLose ngắn nhất (tốt nhất), Winrate cao
+  // Điều kiện theo 3 khuyến nghị (khác nhau cho Option 1 và Option 2)
   // =======================
   final allPairs = pairStats.values.toList();
   
   // Lọc các cặp có đủ dữ liệu (total >= 3)
   final filteredPairs = allPairs.where((p) => p.total >= 3).toList();
   
+  // Lọc theo 3 khuyến nghị (phân biệt Option 1 và Option 2)
+  final qualifiedPairs = filteredPairs.where((p) {
+    if (isOption1) {
+      // ========== OPTION 1: 1 trong 2 số xuất hiện ==========
+      // Xác suất cao (50-60%), Total lớn (400-500), Winrate thường 40-50%, MaxLose ngắn (5-15)
+      
+      // Khuyến nghị 1: Winrate cao (8%+) + MaxLose ngắn (40-) + Lose streak gần max (80%+ của MaxLose)
+      if (p.winrate >= 8.0 && p.maxLoseStreak > 0 && p.maxLoseStreak <= 40) {
+        if (p.currentLoseStreak > 0) {
+          final loseStreakRatio = p.currentLoseStreak / p.maxLoseStreak;
+          if (loseStreakRatio >= 0.8) {
+            return true; // Đạt khuyến nghị 1
+          }
+        }
+      }
+      
+      // Khuyến nghị 2: Winrate trung bình (5%+) + MaxLose ngắn (30-) + Đang win streak
+      if (p.winrate >= 5.0 && p.maxLoseStreak > 0 && p.maxLoseStreak <= 30) {
+        if (p.currentWinStreak > 0) {
+          return true; // Đạt khuyến nghị 2
+        }
+      }
+      
+      // Khuyến nghị 3: Winrate cao + MaxLose ngắn + Vừa mới xuất hiện (currentWinStreak = 1)
+      if (p.winrate >= 8.0 && p.maxLoseStreak > 0 && p.maxLoseStreak <= 40) {
+        if (p.currentWinStreak == 1) {
+          return true; // Đạt khuyến nghị 3
+        }
+      }
+    } else {
+      // ========== OPTION 2: Cả 2 số cùng ngày ==========
+      // Xác suất trung bình (5-15%), Total trung bình (50-150), Winrate thường 5-15%, MaxLose dài hơn (30-60)
+      
+      // Khuyến nghị 1: Winrate >= 6% + MaxLose <= 50 + Lose streak >= 75% của MaxLose
+      if (p.winrate >= 6.0 && p.maxLoseStreak > 0 && p.maxLoseStreak <= 50) {
+        if (p.currentLoseStreak > 0) {
+          final loseStreakRatio = p.currentLoseStreak / p.maxLoseStreak;
+          if (loseStreakRatio >= 0.75) {
+            return true; // Đạt khuyến nghị 1
+          }
+        }
+      }
+      
+      // Khuyến nghị 2: Winrate >= 4% + MaxLose <= 40 + Đang win streak
+      if (p.winrate >= 4.0 && p.maxLoseStreak > 0 && p.maxLoseStreak <= 40) {
+        if (p.currentWinStreak > 0) {
+          return true; // Đạt khuyến nghị 2
+        }
+      }
+      
+      // Khuyến nghị 3: Winrate >= 6% + MaxLose <= 50 + Vừa mới xuất hiện (currentWinStreak = 1)
+      if (p.winrate >= 6.0 && p.maxLoseStreak > 0 && p.maxLoseStreak <= 50) {
+        if (p.currentWinStreak == 1) {
+          return true; // Đạt khuyến nghị 3
+        }
+      }
+    }
+    
+    return false; // Không đạt điều kiện nào
+  }).toList();
+  
+  // Nếu không có cặp nào đạt điều kiện, thông báo
+  if (qualifiedPairs.isEmpty) {
+    print('⚠️  Không có cặp số nào đạt các điều kiện khuyến nghị.');
+    if (isOption1) {
+      print('   Điều kiện (Option 1 - 1 trong 2 số):');
+      print('   1. Winrate >= 8% + MaxLose <= 40 + Lose streak >= 80% của MaxLose');
+      print('   2. Winrate >= 5% + MaxLose <= 30 + Đang win streak');
+      print('   3. Winrate >= 8% + MaxLose <= 40 + Vừa mới xuất hiện (win streak = 1)');
+    } else {
+      print('   Điều kiện (Option 2 - Cả 2 số cùng ngày):');
+      print('   1. Winrate >= 6% + MaxLose <= 50 + Lose streak >= 75% của MaxLose');
+      print('   2. Winrate >= 4% + MaxLose <= 40 + Đang win streak');
+      print('   3. Winrate >= 6% + MaxLose <= 50 + Vừa mới xuất hiện (win streak = 1)');
+    }
+    print('');
+    return; // Thoát sớm nếu không có cặp nào
+  }
+  
   // Sắp xếp theo composite score (MaxLose ngắn nhất + Winrate cao)
-  filteredPairs.sort((a, b) => b.compositeScore.compareTo(a.compositeScore));
+  qualifiedPairs.sort((a, b) => b.compositeScore.compareTo(a.compositeScore));
   
   // Lấy TopN
-  final topNPairs = filteredPairs.take(TOP_N).toList();
+  final topNPairs = qualifiedPairs.take(TOP_N).toList();
   
   // =======================
   // IN KẾT QUẢ
   // =======================
   print('=====================TOP $TOP_N CẶP SỐ TỐT NHẤT=====================');
-  print('(Sắp xếp theo: MaxLose ngắn nhất, Winrate cao)\n');
+  if (isOption1) {
+    print('(Option 1 - 1 trong 2 số: Theo 3 khuyến nghị phù hợp với xác suất cao)');
+  } else {
+    print('(Option 2 - Cả 2 số cùng ngày: Theo 3 khuyến nghị phù hợp với xác suất trung bình)');
+  }
+  print('Tổng số cặp đạt điều kiện: ${qualifiedPairs.length}\n');
   
   for (int i = 0; i < topNPairs.length; i++) {
     final pair = topNPairs[i];
     
     print('${(i + 1).toString().padLeft(2)}. $pair');
     
-    // Hiển thị thông tin cầu lose
+    // Hiển thị thông tin cầu lose/win
     if (pair.currentLoseStreak > 0) {
       print('    ⚠️  Đang lose streak: ${pair.currentLoseStreak} lần (Max từng có: ${pair.maxLoseStreak})');
     } else if (pair.currentWinStreak > 0) {
-      print('    ✅ Đang win streak: ${pair.currentWinStreak} lần');
+      print('    ✅ Đang win streak: ${pair.currentWinStreak} lần (Max từng có: ${pair.maxWinStreak})');
+    } else {
+      // Trường hợp này chỉ xảy ra khi chưa có dữ liệu (chưa từng xuất hiện)
+      print('    ℹ️  Chưa có dữ liệu');
     }
     print('');
   }
@@ -739,61 +838,129 @@ Future<void> processTriples() async {
       }
     }
     
-    // Tính lại win streak từ history
-    if (triple.history.isNotEmpty) {
-      triple.currentWinStreak = 0;
-      triple.maxWinStreak = 0;
-      
-      int tempWinStreak = 0;
-      for (int i = 0; i < triple.history.length; i++) {
-        if (triple.history[i]) {
-          tempWinStreak++;
-          triple.maxWinStreak = max(triple.maxWinStreak, tempWinStreak);
-        } else {
-          tempWinStreak = 0;
-        }
-      }
-      
-      for (int i = triple.history.length - 1; i >= 0; i--) {
-        if (triple.history[i]) {
+    // Tính lại win streak từ appearIndices (toàn bộ data, giống lose streak)
+    // Current win streak: đếm từ ngày cuối lên, số ngày liên tiếp xuất hiện
+    triple.currentWinStreak = 0;
+    if (appearIndices.isNotEmpty) {
+      // Đếm từ ngày cuối lên
+      for (int i = data.length - 1; i >= 0; i--) {
+        if (appearIndices.contains(i)) {
           triple.currentWinStreak++;
         } else {
-          break;
+          break; // Dừng khi gặp ngày không xuất hiện
         }
       }
+    }
+    
+    // Tính maxWinStreak: tìm chuỗi dài nhất các ngày liên tiếp xuất hiện
+    triple.maxWinStreak = 0;
+    if (appearIndices.isNotEmpty) {
+      int tempWinStreak = 0;
+      int prevIndex = -2; // Khởi tạo để đảm bảo không trùng với index đầu tiên
+      
+      for (final appearIndex in appearIndices) {
+        if (appearIndex == prevIndex + 1) {
+          // Liên tiếp với lần trước
+          tempWinStreak++;
+        } else {
+          // Không liên tiếp, bắt đầu chuỗi mới
+          triple.maxWinStreak = max(triple.maxWinStreak, tempWinStreak);
+          tempWinStreak = 1;
+        }
+        prevIndex = appearIndex;
+      }
+      // Cập nhật chuỗi cuối cùng
+      triple.maxWinStreak = max(triple.maxWinStreak, tempWinStreak);
     }
   }
   
   // =======================
   // LỌC VÀ SẮP XẾP: TopN bộ 3 số tốt nhất
+  // Điều kiện theo 3 khuyến nghị phù hợp với xác suất thấp (0.5-3%)
+  // Xác suất thấp → Total nhỏ (5-30), Winrate thường 2-8%, MaxLose rất dài (60-200+)
   // =======================
   final allTriples = tripleStats.values.toList();
   
-  // Lọc các bộ có đủ dữ liệu (total >= 3)
-  final filteredTriples = allTriples.where((t) => t.total >= 3).toList();
+  // Lọc các bộ có đủ dữ liệu (total >= 2, giảm từ 3 để phù hợp với xác suất thấp)
+  // Lưu ý: Với total < 5, kết quả có thể không ổn định, nhưng vẫn hiển thị để tham khảo
+  final filteredTriples = allTriples.where((t) => t.total >= 2).toList();
+  
+  // Lọc theo 3 khuyến nghị (điều kiện thấp hơn cho xác suất thấp)
+  final qualifiedTriples = filteredTriples.where((t) {
+    // Khuyến nghị 1: Winrate >= 3% + MaxLose <= 80 + Lose streak >= 70% của MaxLose
+    if (t.winrate >= 3.0 && t.maxLoseStreak > 0 && t.maxLoseStreak <= 80) {
+      if (t.currentLoseStreak > 0) {
+        final loseStreakRatio = t.currentLoseStreak / t.maxLoseStreak;
+        if (loseStreakRatio >= 0.7) {
+          return true; // Đạt khuyến nghị 1
+        }
+      }
+    }
+    
+    // Khuyến nghị 2: Winrate >= 2% + MaxLose <= 60 + Đang win streak
+    if (t.winrate >= 2.0 && t.maxLoseStreak > 0 && t.maxLoseStreak <= 60) {
+      if (t.currentWinStreak > 0) {
+        return true; // Đạt khuyến nghị 2
+      }
+    }
+    
+    // Khuyến nghị 3: Winrate >= 3% + MaxLose <= 80 + Vừa mới xuất hiện (currentWinStreak = 1)
+    if (t.winrate >= 3.0 && t.maxLoseStreak > 0 && t.maxLoseStreak <= 80) {
+      if (t.currentWinStreak == 1) {
+        return true; // Đạt khuyến nghị 3
+      }
+    }
+    
+    return false; // Không đạt điều kiện nào
+  }).toList();
+  
+  // Nếu không có bộ nào đạt điều kiện, thông báo
+  if (qualifiedTriples.isEmpty) {
+    print('⚠️  Không có bộ 3 số nào đạt các điều kiện khuyến nghị.');
+    print('   Điều kiện (Option 3 - Cả 3 số cùng ngày, xác suất thấp):');
+    print('   1. Winrate >= 3% + MaxLose <= 80 + Lose streak >= 70% của MaxLose');
+    print('   2. Winrate >= 2% + MaxLose <= 60 + Đang win streak');
+    print('   3. Winrate >= 3% + MaxLose <= 80 + Vừa mới xuất hiện (win streak = 1)');
+    print('');
+    print('   📌 Lưu ý: Option 3 có xác suất thấp (0.5-3%), cần dữ liệu lịch sử dài.');
+    print('   Với total < 5, kết quả có thể không ổn định.');
+    print('');
+    return; // Thoát sớm nếu không có bộ nào
+  }
   
   // Sắp xếp theo composite score
-  filteredTriples.sort((a, b) => b.compositeScore.compareTo(a.compositeScore));
+  qualifiedTriples.sort((a, b) => b.compositeScore.compareTo(a.compositeScore));
   
   // Lấy TopN
-  final topNTriples = filteredTriples.take(TOP_N).toList();
+  final topNTriples = qualifiedTriples.take(TOP_N).toList();
   
   // =======================
   // IN KẾT QUẢ
   // =======================
   print('=====================TOP $TOP_N BỘ 3 SỐ TỐT NHẤT=====================');
-  print('(Sắp xếp theo: MaxLose ngắn nhất, Winrate cao)\n');
+  print('(Option 3 - Cả 3 số cùng ngày: Theo 3 khuyến nghị phù hợp với xác suất thấp)');
+  print('Tổng số bộ đạt điều kiện: ${qualifiedTriples.length}');
+  
+  // Đếm số bộ có total < 5 (cảnh báo độ tin cậy thấp)
+  final lowReliabilityCount = qualifiedTriples.where((t) => t.total < 5).length;
+  if (lowReliabilityCount > 0) {
+    print('⚠️  Lưu ý: $lowReliabilityCount bộ có total < 5 (độ tin cậy thấp, chỉ tham khảo)');
+  }
+  print('');
   
   for (int i = 0; i < topNTriples.length; i++) {
     final triple = topNTriples[i];
     
     print('${(i + 1).toString().padLeft(2)}. $triple');
     
-    // Hiển thị thông tin cầu lose
+    // Hiển thị thông tin cầu lose/win
     if (triple.currentLoseStreak > 0) {
       print('    ⚠️  Đang lose streak: ${triple.currentLoseStreak} lần (Max từng có: ${triple.maxLoseStreak})');
     } else if (triple.currentWinStreak > 0) {
-      print('    ✅ Đang win streak: ${triple.currentWinStreak} lần');
+      print('    ✅ Đang win streak: ${triple.currentWinStreak} lần (Max từng có: ${triple.maxWinStreak})');
+    } else {
+      // Trường hợp này chỉ xảy ra khi chưa có dữ liệu (chưa từng xuất hiện)
+      print('    ℹ️  Chưa có dữ liệu');
     }
     print('');
   }
