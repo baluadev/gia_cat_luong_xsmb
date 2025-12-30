@@ -344,60 +344,80 @@ Future<void> processPairs(bool useOrLogic, bool isOption1) async {
       pair.currentLoseStreak = data.length;
     }
     
-    // Tính lại maxLose dựa trên các chuỗi lose streak giữa các lần xuất hiện
-    if (appearIndices.length > 1) {
-      int calculatedMaxLose = 0;
+    // Tính lại maxLose: tìm kỳ lose dài nhất TRƯỚC ngày xuất hiện gần nhất
+    // MaxLose = số ngày liên tiếp không xuất hiện dài nhất (chỉ tính trong quá khứ, trước lastAppearIndex)
+    int calculatedMaxLose = 0;
+    
+    if (appearIndices.isEmpty) {
+      // Trường hợp đặc biệt: Chưa từng xuất hiện
+      // MaxLose = 0 (vì không có kỳ lose nào trong quá khứ, chỉ có kỳ lose hiện tại)
+      calculatedMaxLose = 0;
+    } else {
+      final lastAppearIndex = appearIndices.last;
+      
+      // Chỉ tính các kỳ lose TRƯỚC lastAppearIndex
+      // Trường hợp 1: Lose streak từ đầu đến lần xuất hiện đầu tiên (nếu firstAppearIndex < lastAppearIndex)
+      final firstAppearIndex = appearIndices.first;
+      if (firstAppearIndex > 0 && firstAppearIndex < lastAppearIndex) {
+        calculatedMaxLose = firstAppearIndex;
+      }
+      
+      // Trường hợp 2: Lose streak giữa các lần xuất hiện (chỉ tính đến trước lastAppearIndex)
       for (int i = 1; i < appearIndices.length; i++) {
         final currentAppearIndex = appearIndices[i];
-        final prevAppearIndex = appearIndices[i - 1];
-        final loseStreak = currentAppearIndex - prevAppearIndex - 1;
-        calculatedMaxLose = max(calculatedMaxLose, loseStreak);
-      }
-      
-      // Cập nhật maxLose
-      pair.maxLoseStreak = calculatedMaxLose;
-      
-      // Tính lại currentLoseStreak từ lần xuất hiện gần nhất đến cuối (nếu có)
-      final lastAppearIndex = appearIndices.last;
-      if (lastAppearIndex < data.length - 1) {
-        final currentLoseFromLast = data.length - 1 - lastAppearIndex;
-        pair.maxLoseStreak = max(pair.maxLoseStreak, currentLoseFromLast);
+        // Chỉ tính nếu currentAppearIndex < lastAppearIndex (trước ngày xuất hiện gần nhất)
+        if (currentAppearIndex < lastAppearIndex) {
+          final prevAppearIndex = appearIndices[i - 1];
+          final loseStreak = currentAppearIndex - prevAppearIndex - 1;
+          calculatedMaxLose = max(calculatedMaxLose, loseStreak);
+        }
       }
     }
     
-    // Tính các chuỗi lose streak giữa các lần xuất hiện
-    for (int i = 1; i < appearIndices.length; i++) {
-      final currentAppearIndex = appearIndices[i];
-      final prevAppearIndex = appearIndices[i - 1];
-      final loseStreak = currentAppearIndex - prevAppearIndex - 1;
+    pair.maxLoseStreak = calculatedMaxLose;
+    
+    // Tìm ngày về gần nhất trong quá khứ mà có kỳ lose dài nhất (maxLose)
+    // Chỉ tìm trong các kỳ lose TRƯỚC ngày xuất hiện gần nhất (lastAppearIndex)
+    pair.maxLoseReachedCount = 0;
+    pair.lastMaxLoseDate = null;
+    
+    if (pair.maxLoseStreak > 0 && appearIndices.isNotEmpty) {
+      final lastAppearIndex = appearIndices.last;
+      int closestMaxLoseEndIndex = -1; // Index của ngày cuối cùng của kỳ lose gần nhất (trước lastAppearIndex)
       
-      // Nếu chuỗi lose streak này đạt đúng maxLose
-      if (loseStreak == pair.maxLoseStreak && pair.maxLoseStreak > 0) {
+      // Kiểm tra lose streak từ đầu đến lần xuất hiện đầu tiên
+      final firstAppearIndex = appearIndices.first;
+      if (firstAppearIndex > 0 && firstAppearIndex < lastAppearIndex && firstAppearIndex == pair.maxLoseStreak) {
+        // Ngày cuối của kỳ lose này là ngày trước khi xuất hiện lần đầu
+        final endIndex = firstAppearIndex - 1;
+        if (endIndex >= 0 && (closestMaxLoseEndIndex == -1 || endIndex > closestMaxLoseEndIndex)) {
+          closestMaxLoseEndIndex = endIndex;
+        }
         pair.maxLoseReachedCount++;
-        // Ngày cuối cùng của chuỗi lose streak là ngày trước khi xuất hiện lại
-        final maxLoseDate = data[currentAppearIndex - 1].date;
-        // Cập nhật ngày gần nhất
-        if (pair.lastMaxLoseDate == null || 
-            DateTime.parse(maxLoseDate).isAfter(DateTime.parse(pair.lastMaxLoseDate!))) {
-          pair.lastMaxLoseDate = maxLoseDate;
+      }
+      
+      // Kiểm tra lose streak giữa các lần xuất hiện (chỉ tính đến trước lastAppearIndex)
+      for (int i = 1; i < appearIndices.length; i++) {
+        final currentAppearIndex = appearIndices[i];
+        // Chỉ tính nếu currentAppearIndex < lastAppearIndex
+        if (currentAppearIndex < lastAppearIndex) {
+          final prevAppearIndex = appearIndices[i - 1];
+          final loseStreak = currentAppearIndex - prevAppearIndex - 1;
+          
+          if (loseStreak == pair.maxLoseStreak) {
+            // Ngày cuối của kỳ lose này là ngày trước khi xuất hiện lại
+            final endIndex = currentAppearIndex - 1;
+            if (closestMaxLoseEndIndex == -1 || endIndex > closestMaxLoseEndIndex) {
+              closestMaxLoseEndIndex = endIndex;
+            }
+            pair.maxLoseReachedCount++;
+          }
         }
       }
-    }
-    
-    // Kiểm tra chuỗi lose streak hiện tại (từ lần xuất hiện gần nhất đến cuối)
-    if (appearIndices.isNotEmpty && pair.maxLoseStreak > 0) {
-      final lastAppearIndex = appearIndices.last;
-      final currentLoseStreak = lastAppearIndex < data.length - 1 
-          ? data.length - 1 - lastAppearIndex 
-          : 0;
       
-      if (currentLoseStreak == pair.maxLoseStreak && currentLoseStreak > 0 && data.length > 1) {
-        // Đang đạt maxLose, ngày gần nhất là ngày cuối cùng (hôm qua)
-        final currentLoseDate = data[data.length - 2].date;
-        if (pair.lastMaxLoseDate == null || 
-            DateTime.parse(currentLoseDate).isAfter(DateTime.parse(pair.lastMaxLoseDate!))) {
-          pair.lastMaxLoseDate = currentLoseDate;
-        }
+      // Lưu ngày gần nhất (ngày cuối cùng của kỳ lose dài nhất gần nhất trong quá khứ)
+      if (closestMaxLoseEndIndex >= 0 && closestMaxLoseEndIndex < data.length) {
+        pair.lastMaxLoseDate = data[closestMaxLoseEndIndex].date;
       }
     }
     
@@ -448,7 +468,13 @@ Future<void> processPairs(bool useOrLogic, bool isOption1) async {
   final filteredPairs = allPairs.where((p) => p.total >= 3).toList();
   
   // Lọc theo 3 khuyến nghị (phân biệt Option 1 và Option 2)
+  // Loại bỏ các cặp có currentLoseStreak vượt quá maxLoseStreak
   final qualifiedPairs = filteredPairs.where((p) {
+    // Loại bỏ nếu currentLoseStreak > maxLoseStreak
+    if (p.currentLoseStreak > p.maxLoseStreak && p.maxLoseStreak > 0) {
+      return false;
+    }
+    
     if (isOption1) {
       // ========== OPTION 1: 1 trong 2 số xuất hiện ==========
       // Xác suất cao (50-60%), Total lớn (400-500), Winrate thường 40-50%, MaxLose ngắn (5-15)
@@ -787,54 +813,80 @@ Future<void> processTriples() async {
       triple.currentLoseStreak = data.length;
     }
     
-    // Tính lại maxLose
-    if (appearIndices.length > 1) {
-      int calculatedMaxLose = 0;
+    // Tính lại maxLose: tìm kỳ lose dài nhất TRƯỚC ngày xuất hiện gần nhất
+    // MaxLose = số ngày liên tiếp không xuất hiện dài nhất (chỉ tính trong quá khứ, trước lastAppearIndex)
+    int calculatedMaxLose = 0;
+    
+    if (appearIndices.isEmpty) {
+      // Trường hợp đặc biệt: Chưa từng xuất hiện
+      // MaxLose = 0 (vì không có kỳ lose nào trong quá khứ, chỉ có kỳ lose hiện tại)
+      calculatedMaxLose = 0;
+    } else {
+      final lastAppearIndex = appearIndices.last;
+      
+      // Chỉ tính các kỳ lose TRƯỚC lastAppearIndex
+      // Trường hợp 1: Lose streak từ đầu đến lần xuất hiện đầu tiên (nếu firstAppearIndex < lastAppearIndex)
+      final firstAppearIndex = appearIndices.first;
+      if (firstAppearIndex > 0 && firstAppearIndex < lastAppearIndex) {
+        calculatedMaxLose = firstAppearIndex;
+      }
+      
+      // Trường hợp 2: Lose streak giữa các lần xuất hiện (chỉ tính đến trước lastAppearIndex)
       for (int i = 1; i < appearIndices.length; i++) {
         final currentAppearIndex = appearIndices[i];
-        final prevAppearIndex = appearIndices[i - 1];
-        final loseStreak = currentAppearIndex - prevAppearIndex - 1;
-        calculatedMaxLose = max(calculatedMaxLose, loseStreak);
-      }
-      
-      triple.maxLoseStreak = calculatedMaxLose;
-      
-      final lastAppearIndex = appearIndices.last;
-      if (lastAppearIndex < data.length - 1) {
-        final currentLoseFromLast = data.length - 1 - lastAppearIndex;
-        triple.maxLoseStreak = max(triple.maxLoseStreak, currentLoseFromLast);
+        // Chỉ tính nếu currentAppearIndex < lastAppearIndex (trước ngày xuất hiện gần nhất)
+        if (currentAppearIndex < lastAppearIndex) {
+          final prevAppearIndex = appearIndices[i - 1];
+          final loseStreak = currentAppearIndex - prevAppearIndex - 1;
+          calculatedMaxLose = max(calculatedMaxLose, loseStreak);
+        }
       }
     }
     
-    // Tính maxLoseReachedCount và lastMaxLoseDate
-    for (int i = 1; i < appearIndices.length; i++) {
-      final currentAppearIndex = appearIndices[i];
-      final prevAppearIndex = appearIndices[i - 1];
-      final loseStreak = currentAppearIndex - prevAppearIndex - 1;
+    triple.maxLoseStreak = calculatedMaxLose;
+    
+    // Tìm ngày về gần nhất trong quá khứ mà có kỳ lose dài nhất (maxLose)
+    // Chỉ tìm trong các kỳ lose TRƯỚC ngày xuất hiện gần nhất (lastAppearIndex)
+    triple.maxLoseReachedCount = 0;
+    triple.lastMaxLoseDate = null;
+    
+    if (triple.maxLoseStreak > 0 && appearIndices.isNotEmpty) {
+      final lastAppearIndex = appearIndices.last;
+      int closestMaxLoseEndIndex = -1; // Index của ngày cuối cùng của kỳ lose gần nhất (trước lastAppearIndex)
       
-      if (loseStreak == triple.maxLoseStreak && triple.maxLoseStreak > 0) {
+      // Kiểm tra lose streak từ đầu đến lần xuất hiện đầu tiên
+      final firstAppearIndex = appearIndices.first;
+      if (firstAppearIndex > 0 && firstAppearIndex < lastAppearIndex && firstAppearIndex == triple.maxLoseStreak) {
+        // Ngày cuối của kỳ lose này là ngày trước khi xuất hiện lần đầu
+        final endIndex = firstAppearIndex - 1;
+        if (endIndex >= 0 && (closestMaxLoseEndIndex == -1 || endIndex > closestMaxLoseEndIndex)) {
+          closestMaxLoseEndIndex = endIndex;
+        }
         triple.maxLoseReachedCount++;
-        final maxLoseDate = data[currentAppearIndex - 1].date;
-        if (triple.lastMaxLoseDate == null || 
-            DateTime.parse(maxLoseDate).isAfter(DateTime.parse(triple.lastMaxLoseDate!))) {
-          triple.lastMaxLoseDate = maxLoseDate;
+      }
+      
+      // Kiểm tra lose streak giữa các lần xuất hiện (chỉ tính đến trước lastAppearIndex)
+      for (int i = 1; i < appearIndices.length; i++) {
+        final currentAppearIndex = appearIndices[i];
+        // Chỉ tính nếu currentAppearIndex < lastAppearIndex
+        if (currentAppearIndex < lastAppearIndex) {
+          final prevAppearIndex = appearIndices[i - 1];
+          final loseStreak = currentAppearIndex - prevAppearIndex - 1;
+          
+          if (loseStreak == triple.maxLoseStreak) {
+            // Ngày cuối của kỳ lose này là ngày trước khi xuất hiện lại
+            final endIndex = currentAppearIndex - 1;
+            if (closestMaxLoseEndIndex == -1 || endIndex > closestMaxLoseEndIndex) {
+              closestMaxLoseEndIndex = endIndex;
+            }
+            triple.maxLoseReachedCount++;
+          }
         }
       }
-    }
-    
-    // Kiểm tra chuỗi lose streak hiện tại
-    if (appearIndices.isNotEmpty && triple.maxLoseStreak > 0) {
-      final lastAppearIndex = appearIndices.last;
-      final currentLoseStreak = lastAppearIndex < data.length - 1 
-          ? data.length - 1 - lastAppearIndex 
-          : 0;
       
-      if (currentLoseStreak == triple.maxLoseStreak && currentLoseStreak > 0 && data.length > 1) {
-        final currentLoseDate = data[data.length - 2].date;
-        if (triple.lastMaxLoseDate == null || 
-            DateTime.parse(currentLoseDate).isAfter(DateTime.parse(triple.lastMaxLoseDate!))) {
-          triple.lastMaxLoseDate = currentLoseDate;
-        }
+      // Lưu ngày gần nhất (ngày cuối cùng của kỳ lose dài nhất gần nhất trong quá khứ)
+      if (closestMaxLoseEndIndex >= 0 && closestMaxLoseEndIndex < data.length) {
+        triple.lastMaxLoseDate = data[closestMaxLoseEndIndex].date;
       }
     }
     
@@ -886,7 +938,13 @@ Future<void> processTriples() async {
   final filteredTriples = allTriples.where((t) => t.total >= 2).toList();
   
   // Lọc theo 3 khuyến nghị (điều kiện thấp hơn cho xác suất thấp)
+  // Loại bỏ các bộ có currentLoseStreak vượt quá maxLoseStreak
   final qualifiedTriples = filteredTriples.where((t) {
+    // Loại bỏ nếu currentLoseStreak > maxLoseStreak
+    if (t.currentLoseStreak > t.maxLoseStreak && t.maxLoseStreak > 0) {
+      return false;
+    }
+    
     // Khuyến nghị 1: Winrate >= 3% + MaxLose <= 80 + Lose streak >= 70% của MaxLose
     if (t.winrate >= 3.0 && t.maxLoseStreak > 0 && t.maxLoseStreak <= 80) {
       if (t.currentLoseStreak > 0) {

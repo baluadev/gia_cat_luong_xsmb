@@ -1,129 +1,10 @@
 import 'dart:io';
 
-class DataModel {
-  final String date;
-  final int de;
-  final List<int> others;
-
-  DataModel({
-    required this.date,
-    required this.de,
-    required this.others,
-  });
-}
-
-/// Thống kê cho một số cụ thể (0-99) sau khi có DE
-class NumberStat {
-  final int number;
-  int appearanceCount = 0;
-  int totalDays = 0;
-  int hitDays = 0;
-  final List<bool> history = [];
-  int maxWinStreak = 0;
-  int maxLoseStreak = 0;
-  int currentWinStreak = 0;
-  int currentLoseStreak = 0;
-
-  NumberStat(this.number);
-
-  double get winrate => totalDays == 0 ? 0 : (hitDays / totalDays * 100);
-  double get frequency => totalDays == 0 ? 0 : (appearanceCount / totalDays);
-  
-  void addResult(bool appeared, int count) {
-    totalDays++;
-    if (appeared) {
-      hitDays++;
-      appearanceCount += count;
-      currentWinStreak++;
-      currentLoseStreak = 0;
-      if (currentWinStreak > maxWinStreak) {
-        maxWinStreak = currentWinStreak;
-      }
-      history.add(true);
-    } else {
-      currentLoseStreak++;
-      currentWinStreak = 0;
-      if (currentLoseStreak > maxLoseStreak) {
-        maxLoseStreak = currentLoseStreak;
-      }
-      history.add(false);
-    }
-  }
-}
-
-/// Thống kê cho một cặp số
-class PairStat {
-  final int num1;
-  final int num2;
-  int hitDays = 0;
-  int totalDays = 0;
-  final List<bool> history = [];
-  int maxWinStreak = 0;
-  int maxLoseStreak = 0;
-
-  PairStat(this.num1, this.num2);
-
-  double get winrate => totalDays == 0 ? 0 : (hitDays / totalDays * 100);
-  
-  void addResult(bool hit) {
-    totalDays++;
-    if (hit) {
-      hitDays++;
-      history.add(true);
-      final currentWin = _getCurrentStreak(true);
-      if (currentWin > maxWinStreak) maxWinStreak = currentWin;
-    } else {
-      history.add(false);
-      final currentLose = _getCurrentStreak(false);
-      if (currentLose > maxLoseStreak) maxLoseStreak = currentLose;
-    }
-  }
-  
-  int _getCurrentStreak(bool isWin) {
-    if (history.isEmpty) return 0;
-    int streak = 0;
-    for (int i = history.length - 1; i >= 0; i--) {
-      if (history[i] == isWin) {
-        streak++;
-      } else {
-        break;
-      }
-    }
-    return streak;
-  }
-}
-
-/// Kết quả backtest
-class BacktestResult {
-  final List<int> selectedNumbers;
-  final String method;
-  final int totalDays;
-  final int hits;
-  final int misses;
-  final double winrate;
-  final int profit;
-  final double roi;
-  final int maxWinStreak;
-  final int maxLoseStreak;
-
-  BacktestResult({
-    required this.selectedNumbers,
-    required this.method,
-    required this.totalDays,
-    required this.hits,
-    required this.misses,
-    required this.winrate,
-    required this.profit,
-    required this.roi,
-    required this.maxWinStreak,
-    required this.maxLoseStreak,
-  });
-}
+import 'data_model.dart';
 
 Future<List<DataModel>> loadDataModels(String path) async {
   final lines = await File(path).readAsLines();
   lines.removeAt(0);
-
   return lines.map((line) {
     final parts = line.split(',');
     return DataModel(
@@ -134,287 +15,160 @@ Future<List<DataModel>> loadDataModels(String path) async {
   }).toList();
 }
 
-/// 1️⃣ THỐNG KÊ TẦN SUẤT VÀ WINRATE CHO TỪNG SỐ (0-99)
-Map<int, Map<int, NumberStat>> buildNumberStats(List<DataModel> sortedData) {
-  final stats = <int, Map<int, NumberStat>>{};
+class PairResult {
+  final int num1;
+  final int num2;
+  final int maxlose;
+  final int currentlose;
+  final int count;
+  final String lastAppearanceDate;
+  final int lastLose;
+  final String top3LoseFrequent;
 
-  for (int i = 0; i < sortedData.length - 1; i++) {
-    final today = sortedData[i];
-    final tomorrow = sortedData[i + 1];
-    final de = today.de;
-    final tomorrowOthers = tomorrow.others;
+  PairResult({
+    required this.num1,
+    required this.num2,
+    required this.maxlose,
+    required this.currentlose,
+    required this.count,
+    required this.lastAppearanceDate,
+    required this.lastLose,
+    required this.top3LoseFrequent,
+  });
 
-    stats.putIfAbsent(de, () => {});
-    final deStats = stats[de]!;
-
-    final countMap = <int, int>{};
-    for (final num in tomorrowOthers) {
-      countMap[num] = (countMap[num] ?? 0) + 1;
-    }
-
-    for (int num = 0; num < 100; num++) {
-      deStats.putIfAbsent(num, () => NumberStat(num));
-      final stat = deStats[num]!;
-      final appeared = countMap.containsKey(num);
-      final count = countMap[num] ?? 0;
-      stat.addResult(appeared, count);
-    }
-  }
-
-  return stats;
+  String get pairString => '${num1.toString().padLeft(2, '0')}-${num2.toString().padLeft(2, '0')}';
 }
 
-/// 2️⃣ PAIR COMBINATION
-Map<int, Map<String, PairStat>> buildPairStats(
+// Tạo tất cả các cặp số từ 00-99 (không trùng nhau)
+List<(int, int)> generateAllPairs() {
+  final pairs = <(int, int)>[];
+  for (int i = 0; i < 100; i++) {
+    for (int j = i + 1; j < 100; j++) {
+      pairs.add((i, j));
+    }
+  }
+  return pairs;
+}
+
+// Kiểm tra cặp số xuất hiện trong 1 ngày
+// mode = 1: 1 trong 2 số xuất hiện
+// mode = 2: cả 2 số cùng xuất hiện
+bool isPairAppearedInDay(DataModel data, int num1, int num2, int mode) {
+  final hasNum1 = data.others.contains(num1);
+  final hasNum2 = data.others.contains(num2);
+  
+  if (mode == 1) {
+    return hasNum1 || hasNum2;
+  } else {
+    return hasNum1 && hasNum2;
+  }
+}
+
+// Tính số ngày giữa 2 ngày
+int daysBetween(DateTime date1, DateTime date2) {
+  return date2.difference(date1).inDays;
+}
+
+// Tính maxlose và currentlose cho một cặp số
+PairResult? calculatePairResult(
   List<DataModel> sortedData,
-  Map<int, Map<int, NumberStat>> numberStats,
+  int num1,
+  int num2,
+  int mode,
 ) {
-  final pairStats = <int, Map<String, PairStat>>{};
-
-  for (int i = 0; i < sortedData.length - 1; i++) {
-    final today = sortedData[i];
-    final tomorrow = sortedData[i + 1];
-    final de = today.de;
-    final tomorrowOthersSet = tomorrow.others.toSet();
-
-    pairStats.putIfAbsent(de, () => {});
-
-    final deNumberStats = numberStats[de] ?? {};
-    final topNumbers = deNumberStats.values.toList()
-      ..sort((a, b) => b.winrate.compareTo(a.winrate));
-    final top10 = topNumbers.take(10).map((s) => s.number).toList();
-
-    final dePairStats = pairStats[de]!;
-    for (int i = 0; i < top10.length; i++) {
-      for (int j = i + 1; j < top10.length; j++) {
-        final num1 = top10[i];
-        final num2 = top10[j];
-        final key = '${num1}_$num2';
-        
-        dePairStats.putIfAbsent(key, () => PairStat(num1, num2));
-        final pairStat = dePairStats[key]!;
-        
-        final hit = tomorrowOthersSet.contains(num1) || tomorrowOthersSet.contains(num2);
-        pairStat.addResult(hit);
-      }
+  // Tìm tất cả các ngày xuất hiện
+  final appearanceDates = <DateTime>[];
+  final appearanceData = <DataModel>[];
+  
+  for (final data in sortedData) {
+    if (isPairAppearedInDay(data, num1, num2, mode)) {
+      final date = DateTime.parse(data.date);
+      appearanceDates.add(date);
+      appearanceData.add(data);
     }
   }
 
-  return pairStats;
-}
-
-/// 3️⃣ MAX LOSE STREAK FILTERING
-List<int> filterByMaxLoseStreak(
-  Map<int, NumberStat> deStats,
-  int maxAllowedLoseStreak,
-) {
-  return deStats.values
-      .where((stat) => stat.maxLoseStreak <= maxAllowedLoseStreak)
-      .map((stat) => stat.number)
-      .toList();
-}
-
-/// 4️⃣ CONDITIONAL PROBABILITY SAU L/LL
-Map<int, double> calculateConditionalProbability(
-  Map<int, NumberStat> deStats,
-) {
-  final condProbs = <int, double>{};
-
-  for (final stat in deStats.values) {
-    if (stat.history.length < 2) {
-      condProbs[stat.number] = stat.winrate;
-      continue;
-    }
-
-    int afterL = 0;
-    int afterLCount = 0;
-    int afterLL = 0;
-    int afterLLCount = 0;
-
-    for (int i = 1; i < stat.history.length; i++) {
-      if (!stat.history[i - 1]) {
-        afterLCount++;
-        if (stat.history[i]) {
-          afterL++;
-        }
-
-        if (i >= 2 && !stat.history[i - 2]) {
-          afterLLCount++;
-          if (stat.history[i]) {
-            afterLL++;
-          }
-        }
-      }
-    }
-
-    final probAfterL = afterLCount > 0 ? (afterL / afterLCount * 100) : stat.winrate;
-    final probAfterLL = afterLLCount > 0 ? (afterLL / afterLLCount * 100) : probAfterL;
-
-    condProbs[stat.number] = afterLLCount >= 5 ? probAfterLL : probAfterL;
+  // Nếu chưa từng xuất hiện hoặc chỉ xuất hiện 1 lần → bỏ qua
+  if (appearanceDates.length < 2) {
+    return null;
   }
 
-  return condProbs;
-}
-
-/// 5️⃣ VOTING
-List<int> votingMethod(
-  Map<int, NumberStat> deStats,
-  Map<String, PairStat> pairStats,
-  int topN,
-) {
-  final byWinrate = deStats.values.toList()
-    ..sort((a, b) => b.winrate.compareTo(a.winrate));
-  final topByWinrate = byWinrate.take(topN).map((s) => s.number).toSet();
-
-  final byFrequency = deStats.values.toList()
-    ..sort((a, b) => b.frequency.compareTo(a.frequency));
-  final topByFrequency = byFrequency.take(topN).map((s) => s.number).toSet();
-
-  final pairStatsList = pairStats.values.toList()
-    ..sort((a, b) => b.winrate.compareTo(a.winrate));
-  final topPairs = <int>{};
-  for (final pair in pairStatsList.take(topN)) {
-    topPairs.add(pair.num1);
-    topPairs.add(pair.num2);
-  }
-
-  final condProbs = calculateConditionalProbability(deStats);
-  final byCondProb = condProbs.entries.toList()
-    ..sort((a, b) => b.value.compareTo(a.value));
-  final topByCondProb = byCondProb.take(topN).map((e) => e.key).toSet();
-
-  final votes = <int, int>{};
-  for (final num in topByWinrate) votes[num] = (votes[num] ?? 0) + 1;
-  for (final num in topByFrequency) votes[num] = (votes[num] ?? 0) + 1;
-  for (final num in topPairs) votes[num] = (votes[num] ?? 0) + 1;
-  for (final num in topByCondProb) votes[num] = (votes[num] ?? 0) + 1;
-
-  final selected = votes.entries
-      .where((e) => e.value >= 3)
-      .map((e) => e.key)
-      .toList()
-    ..sort((a, b) => votes[b]!.compareTo(votes[a]!));
-
-  if (selected.isEmpty) {
-    final allVoted = votes.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return allVoted.take(topN).map((e) => e.key).toList();
-  }
-
-  return selected;
-}
-
-/// 6️⃣ CUT-LOSS
-bool shouldStopDueToCutLoss(
-  Map<int, NumberStat> deStats,
-  List<int> selectedNumbers,
-  int cutLossThreshold,
-) {
-  for (final num in selectedNumbers) {
-    final stat = deStats[num];
-    if (stat != null && stat.currentLoseStreak >= cutLossThreshold) {
-      return true;
+  // Tính maxlose và thống kê tất cả các lose
+  int maxlose = 0;
+  final loseFrequency = <int, int>{}; // Map: lose -> số lần xuất hiện
+  
+  for (int i = 0; i < appearanceDates.length - 1; i++) {
+    final days = daysBetween(appearanceDates[i], appearanceDates[i + 1]);
+    if (days > 1) {
+      // Khoảng lose = số ngày giữa 2 ngày - 1 (không tính 2 ngày xuất hiện)
+      final lose = days - 1;
+      if (lose > maxlose) {
+        maxlose = lose;
+      }
+      // Thống kê tần suất lose
+      loseFrequency[lose] = (loseFrequency[lose] ?? 0) + 1;
     }
   }
-  return false;
-}
 
-/// BACKTEST MỘT PHƯƠNG PHÁP
-BacktestResult backtestMethod(
-  String methodName,
-  List<DataModel> sortedData,
-  Map<int, Map<int, NumberStat>> allStats,
-  List<int> Function(int de, Map<int, NumberStat>, Map<String, PairStat>) selector,
-  Map<int, Map<String, PairStat>>? pairStats,
-  {int? cutLossThreshold}
-) {
-  final history = <bool>[];
-  int hits = 0;
-  int misses = 0;
-  int profit = 0;
-  int maxWinStreak = 0;
-  int maxLoseStreak = 0;
-  int currentWinStreak = 0;
-  int currentLoseStreak = 0;
+  // Tính currentlose (từ lần xuất hiện gần nhất đến ngày mới nhất)
+  final lastAppearanceDate = appearanceDates.last;
+  final newestDate = DateTime.parse(sortedData.last.date);
+  final daysToNewest = daysBetween(lastAppearanceDate, newestDate);
+  final currentlose = daysToNewest > 0 ? daysToNewest : 0;
 
-  const stakePerNumber = 1;
-  const payoutPerHit = 70;
+  // Kiểm tra xem ngày mới nhất có xuất hiện không (so sánh ngày, không so sánh giờ)
+  final lastAppearanceDateOnly = DateTime(lastAppearanceDate.year, lastAppearanceDate.month, lastAppearanceDate.day);
+  final newestDateOnly = DateTime(newestDate.year, newestDate.month, newestDate.day);
+  final isNewestAppeared = lastAppearanceDateOnly.isAtSameMomentAs(newestDateOnly);
 
-  for (int i = 0; i < sortedData.length - 1; i++) {
-    final today = sortedData[i];
-    final tomorrow = sortedData[i + 1];
-    final de = today.de;
-    final deStats = allStats[de] ?? {};
-
-    if (deStats.isEmpty) continue;
-
-    if (cutLossThreshold != null) {
-      final prevSelected = selector(
-        de,
-        deStats,
-        pairStats?[de] ?? {},
-      );
-      if (shouldStopDueToCutLoss(deStats, prevSelected, cutLossThreshold)) {
-        continue;
-      }
-    }
-
-    final selected = selector(de, deStats, pairStats?[de] ?? {});
-
-    if (selected.isEmpty) continue;
-
-    final tomorrowOthersSet = tomorrow.others.toSet();
-    bool hasHit = false;
-    int hitCount = 0;
-
-    for (final num in selected) {
-      if (tomorrowOthersSet.contains(num)) {
-        hasHit = true;
-        final count = tomorrow.others.where((n) => n == num).length;
-        hitCount += count;
-      }
-    }
-
-    final totalStake = selected.length * stakePerNumber;
-    final totalPayout = hitCount * payoutPerHit;
-    final dayProfit = totalPayout - totalStake;
-
-    profit += dayProfit;
-
-    if (hasHit) {
-      hits++;
-      currentWinStreak++;
-      currentLoseStreak = 0;
-      if (currentWinStreak > maxWinStreak) {
-        maxWinStreak = currentWinStreak;
-      }
-      history.add(true);
+  // Tính lastLose
+  int lastLose;
+  if (isNewestAppeared) {
+    // Nếu ngày mới nhất đã xuất hiện: lose từ lần xuất hiện gần nhất (trước đó) đến ngày mới nhất
+    if (appearanceDates.length >= 2) {
+      final secondLastDate = appearanceDates[appearanceDates.length - 2];
+      final daysBetweenLastTwo = daysBetween(secondLastDate, lastAppearanceDate);
+      lastLose = daysBetweenLastTwo > 1 ? daysBetweenLastTwo - 1 : 0;
     } else {
-      misses++;
-      currentLoseStreak++;
-      currentWinStreak = 0;
-      if (currentLoseStreak > maxLoseStreak) {
-        maxLoseStreak = currentLoseStreak;
-      }
-      history.add(false);
+      lastLose = 0;
+    }
+  } else {
+    // Nếu ngày mới nhất chưa xuất hiện: lose cuối cùng đã kết thúc (trước lần xuất hiện gần nhất)
+    if (appearanceDates.length >= 2) {
+      final secondLastDate = appearanceDates[appearanceDates.length - 2];
+      final daysBetweenLastTwo = daysBetween(secondLastDate, lastAppearanceDate);
+      lastLose = daysBetweenLastTwo > 1 ? daysBetweenLastTwo - 1 : 0;
+    } else {
+      lastLose = 0;
     }
   }
 
-  final totalDays = hits + misses;
-  final winrate = totalDays > 0 ? (hits / totalDays * 100) : 0.0;
-  final roi = totalDays > 0 ? (profit / totalDays) : 0.0;
+  // Tính top 3 lose xuất hiện thường xuyên nhất
+  final loseEntries = loseFrequency.entries.toList();
+  // Sắp xếp theo số lần xuất hiện (nhiều nhất trước), giữ nguyên thứ tự tìm thấy khi bằng nhau
+  loseEntries.sort((a, b) {
+    if (a.value != b.value) {
+      return b.value.compareTo(a.value); // Nhiều nhất trước
+    }
+    return 0; // Giữ nguyên thứ tự
+  });
+  
+  final top3Lose = loseEntries.take(3).toList();
+  final top3LoseString = top3Lose.map((e) => 'lose${e.key}(${e.value})').join(', ');
+  final top3LoseFrequent = top3LoseString.isEmpty ? '-' : top3LoseString;
 
-  return BacktestResult(
-    selectedNumbers: [],
-    method: methodName,
-    totalDays: totalDays,
-    hits: hits,
-    misses: misses,
-    winrate: winrate,
-    profit: profit,
-    roi: roi,
-    maxWinStreak: maxWinStreak,
-    maxLoseStreak: maxLoseStreak,
+  // Format ngày xuất hiện gần nhất
+  final lastDateString = '${lastAppearanceDate.year}-${lastAppearanceDate.month.toString().padLeft(2, '0')}-${lastAppearanceDate.day.toString().padLeft(2, '0')}';
+
+  return PairResult(
+    num1: num1,
+    num2: num2,
+    maxlose: maxlose,
+    currentlose: currentlose,
+    count: appearanceDates.length,
+    lastAppearanceDate: lastDateString,
+    lastLose: lastLose,
+    top3LoseFrequent: top3LoseFrequent,
   );
 }
 
@@ -430,126 +184,64 @@ Future<void> main() async {
   dataWithDate.sort((a, b) => a.dateTime.compareTo(b.dateTime));
   final sortedData = dataWithDate.map((e) => e.model).toList();
 
-  print('📊 BACKTEST THUẬT TOÁN CHỌN CẶP 2 SỐ TỪ DE');
-  print('=' * 80);
-  print('Tổng số ngày: ${sortedData.length}');
-  print('Số ngày backtest: ${sortedData.length - 1}\n');
-
-  print('🔨 Đang xây dựng thống kê...');
-  final allStats = buildNumberStats(sortedData);
-  final pairStats = buildPairStats(sortedData, allStats);
-  print('✅ Hoàn thành thống kê\n');
-
-  final results = <BacktestResult>[];
-
-  results.add(backtestMethod(
-    'Top 2 theo Winrate',
-    sortedData,
-    allStats,
-    (de, deStats, _) {
-      final sorted = deStats.values.toList()
-        ..sort((a, b) => b.winrate.compareTo(a.winrate));
-      return sorted.take(2).map((s) => s.number).toList();
-    },
-    null,
-  ));
-
-  results.add(backtestMethod(
-    'Top 2 theo Frequency',
-    sortedData,
-    allStats,
-    (de, deStats, _) {
-      final sorted = deStats.values.toList()
-        ..sort((a, b) => b.frequency.compareTo(a.frequency));
-      return sorted.take(2).map((s) => s.number).toList();
-    },
-    null,
-  ));
-
-  results.add(backtestMethod(
-    'Voting (≥3 phương pháp)',
-    sortedData,
-    allStats,
-    (de, deStats, dePairStats) {
-      return votingMethod(deStats, dePairStats, 5);
-    },
-    pairStats,
-  ));
-
-  results.add(backtestMethod(
-    'Top 2 + Max LOSE ≤10 filter',
-    sortedData,
-    allStats,
-    (de, deStats, _) {
-      final filtered = filterByMaxLoseStreak(deStats, 10);
-      final filteredStats = filtered.map((n) => deStats[n]!).toList()
-        ..sort((a, b) => b.winrate.compareTo(a.winrate));
-      return filteredStats.take(2).map((s) => s.number).toList();
-    },
-    null,
-  ));
-
-  results.add(backtestMethod(
-    'Conditional Prob sau L/LL',
-    sortedData,
-    allStats,
-    (de, deStats, _) {
-      final condProbs = calculateConditionalProbability(deStats);
-      final sorted = condProbs.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-      return sorted.take(2).map((e) => e.key).toList();
-    },
-    null,
-  ));
-
-  results.add(backtestMethod(
-    'Top 2 + Cut-loss (streak≥8)',
-    sortedData,
-    allStats,
-    (de, deStats, _) {
-      final sorted = deStats.values.toList()
-        ..sort((a, b) => b.winrate.compareTo(a.winrate));
-      return sorted.take(2).map((s) => s.number).toList();
-    },
-    null,
-    cutLossThreshold: 8,
-  ));
-
-  results.sort((a, b) {
-    final winrateCompare = b.winrate.compareTo(a.winrate);
-    if (winrateCompare != 0) return winrateCompare;
-    return b.roi.compareTo(a.roi);
-  });
-
-  print('📈 KẾT QUẢ BACKTEST:');
-  print('=' * 80);
-  print('');
-
-  for (int i = 0; i < results.length; i++) {
-    final r = results[i];
-    print('${i + 1}. ${r.method}');
-    print('   ├─ Winrate: ${r.winrate.toStringAsFixed(2)}% (${r.hits}/${r.totalDays})');
-    print('   ├─ ROI/lần: ${r.roi.toStringAsFixed(2)} điểm');
-    print('   ├─ Tổng profit: ${r.profit} điểm');
-    print('   ├─ Max WIN streak: ${r.maxWinStreak}');
-    print('   └─ Max LOSE streak: ${r.maxLoseStreak}');
-    print('');
+  // Nhập mode
+  print('Nhập 1: Tìm top 10 cặp số (1 trong 2 số xuất hiện)');
+  print('Nhập 2: Tìm top 10 cặp số (cả 2 số cùng xuất hiện)');
+  stdout.write('Chọn mode (1 hoặc 2): ');
+  final modeInput = stdin.readLineSync();
+  final mode = int.tryParse(modeInput ?? '') ?? 1;
+  
+  if (mode != 1 && mode != 2) {
+    print('Mode không hợp lệ!');
+    return;
   }
 
-  final best = results.first;
-  print('🏆 PHƯƠNG PHÁP TỐT NHẤT: ${best.method}');
-  print('   Winrate: ${best.winrate.toStringAsFixed(2)}%');
-  print('   ROI/lần: ${best.roi.toStringAsFixed(2)} điểm');
-
-  final latestDe = sortedData.last.de;
-  final latestDeStats = allStats[latestDe] ?? {};
-  if (latestDeStats.isNotEmpty) {
-    print('\n📋 TOP 2 SỐ CHO DE $latestDe (ngày gần nhất):');
-    final topNumbers = latestDeStats.values.toList()
-      ..sort((a, b) => b.winrate.compareTo(a.winrate));
-    final top2 = topNumbers.take(2).toList();
-    for (final stat in top2) {
-      print('  ${stat.number}');
+  print('\nĐang xử lý...');
+  
+  // Tạo tất cả các cặp số
+  final pairs = generateAllPairs();
+  
+  // Tính toán cho tất cả các cặp số
+  final results = <PairResult>[];
+  for (final (num1, num2) in pairs) {
+    final result = calculatePairResult(sortedData, num1, num2, mode);
+    if (result != null) {
+      results.add(result);
     }
+  }
+
+  // Sắp xếp theo:
+  // 1. Số lần xuất hiện (nhiều nhất trước)
+  // 2. Maxlose (ngắn nhất trước)
+  // 3. |currentlose - maxlose| (nhỏ nhất trước)
+  results.sort((a, b) {
+    // Ưu tiên 1: Số lần xuất hiện
+    if (a.count != b.count) {
+      return b.count.compareTo(a.count); // Nhiều nhất trước
+    }
+    
+    // Ưu tiên 2: Maxlose
+    if (a.maxlose != b.maxlose) {
+      return a.maxlose.compareTo(b.maxlose); // Ngắn nhất trước
+    }
+    
+    // Ưu tiên 3: |currentlose - maxlose|
+    final diffA = (a.currentlose - a.maxlose).abs();
+    final diffB = (b.currentlose - b.maxlose).abs();
+    return diffA.compareTo(diffB); // Nhỏ nhất trước
+  });
+
+  // Lấy top 10
+  final top10 = results.take(10).toList();
+
+  // Hiển thị kết quả
+  print('\n=== TOP 10 CẶP SỐ ===');
+  print('Mode: ${mode == 1 ? "1 trong 2 số xuất hiện" : "Cả 2 số cùng xuất hiện"}');
+  print('\n${'STT'.padLeft(4)} | ${'Cặp số'.padRight(6)} | ${'Maxlose'.padLeft(8)} | ${'Currentlose'.padLeft(12)} | ${'Số lần'.padLeft(8)} | ${'Lose gần nhất'.padLeft(14)} | Top 3 lose thường xuyên | Ngày xuất hiện gần nhất');
+  print('${'-' * 4} | ${'-' * 6} | ${'-' * 8} | ${'-' * 12} | ${'-' * 8} | ${'-' * 14} | ${'-' * 25} | ${'-' * 25}');
+  
+  for (int i = 0; i < top10.length; i++) {
+    final result = top10[i];
+    print('${(i + 1).toString().padLeft(4)} | ${result.pairString.padRight(6)} | ${result.maxlose.toString().padLeft(8)} | ${result.currentlose.toString().padLeft(12)} | ${result.count.toString().padLeft(8)} | ${result.lastLose.toString().padLeft(14)} | ${result.top3LoseFrequent.padRight(25)} | ${result.lastAppearanceDate}');
   }
 }
