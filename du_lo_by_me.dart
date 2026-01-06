@@ -54,7 +54,7 @@ class TotalCauStat {
   }
 
   /// ✅ WWL(20/12/2025 - 16)
-  String textWithLatestDe(int latestDe) {
+  String textWithLatestDe(int latestDe, String? latestDate) {
     final sb = StringBuffer();
 
     for (final item in history) {
@@ -65,6 +65,12 @@ class TotalCauStat {
         sb.write(char);
       }
     }
+
+    // Thêm '?' cho ngày cuối cùng nếu nó có DE=latestDe nhưng chưa có trong history
+    if (latestDate != null && !history.any((item) => item.date == latestDate)) {
+      sb.write('?(${latestDate.split(' ').first} - $latestDe)');
+    }
+
     return sb.toString();
   }
 }
@@ -124,11 +130,11 @@ extension RoiPower on RoiStat {
 
 /// =======================
 /// CONFIG
-/// =======================
+/// =======================git
 const int POINT_PER_NUMBER = 5; // mặc định nếu đánh đều 3 số
 const int COST_PER_POINT = 22500;
 const int PROFIT_PER_HIT_PER_POINT = 80000; // ví dụ lợi nhuận 1 điểm trúng
-const int TOP_N_NUMBERS_DEFAULT = 2; // số lượng số top để dự đoán (default)
+const int TOP_N_NUMBERS = 3; // số lượng số top để dự đoán
 const int TOTAL_POINTS_TODAY = 15; // tổng điểm muốn đánh hôm nay
 const int MIN_DE_SAMPLE =
     8; // tối thiểu số lần DE xuất hiện để coi là đủ dữ liệu
@@ -155,65 +161,10 @@ Future<void> main() async {
       .toList();
   dataWithDate.sort((a, b) => a.dateTime.compareTo(b.dateTime));
   final sortedData = dataWithDate.map((e) => e.model).toList();
+  print(sortedData.first.date);
 
   // =======================
-  // MAIN LOOP: Nhập TOP_N_NUMBERS và chạy analysis
-  // =======================
-  while (true) {
-    stdout.write(
-        '\nNhập số lượng số top để dự đoán (Enter để dùng mặc định $TOP_N_NUMBERS_DEFAULT): ');
-    final input = stdin.readLineSync()?.trim();
-    int topNNumbers;
-    if (input == null || input.isEmpty) {
-      topNNumbers = TOP_N_NUMBERS_DEFAULT;
-      print('Sử dụng giá trị mặc định: $topNNumbers');
-    } else {
-      final parsed = int.tryParse(input);
-      if (parsed == null || parsed <= 0) {
-        print('⚠ Giá trị không hợp lệ. Sử dụng mặc định: $TOP_N_NUMBERS_DEFAULT');
-        topNNumbers = TOP_N_NUMBERS_DEFAULT;
-      } else {
-        topNNumbers = parsed;
-      }
-    }
-
-    // Nhập số điểm muốn đánh
-    stdout.write(
-        '\nNhập số điểm muốn đánh (Enter để dùng mặc định $TOTAL_POINTS_TODAY): ');
-    final pointsInput = stdin.readLineSync()?.trim();
-    int totalPointsToday;
-    if (pointsInput == null || pointsInput.isEmpty) {
-      totalPointsToday = TOTAL_POINTS_TODAY;
-      print('Sử dụng số điểm mặc định: $totalPointsToday');
-    } else {
-      final parsedPoints = int.tryParse(pointsInput);
-      if (parsedPoints == null || parsedPoints <= 0) {
-        print('⚠️ Giá trị không hợp lệ. Sử dụng mặc định: $TOTAL_POINTS_TODAY');
-        totalPointsToday = TOTAL_POINTS_TODAY;
-      } else {
-        totalPointsToday = parsedPoints;
-      }
-    }
-
-    await runAnalysis(sortedData, topNNumbers, totalPointsToday);
-
-    // Hỏi tiếp tục hay không
-    stdout.write('\nTiếp tục? (y/n): ');
-    final continueInput = stdin.readLineSync()?.trim().toLowerCase();
-    if (continueInput != 'y' && continueInput != 'yes') {
-      print('👋 Tạm biệt!');
-      break;
-    }
-  }
-}
-
-/// =======================
-/// CHẠY PHÂN TÍCH VỚI TOP_N_NUMBERS
-/// =======================
-Future<void> runAnalysis(
-    List<DataModel> sortedData, int topNNumbers, int totalPointsToday) async {
-  // =======================
-  // MAP: DE -> COUNTS (đếm số ngày, không phải số lần xuất hiện)
+  // MAP: DE -> COUNTS (tối ưu: tính counts trực tiếp, không cần lưu list)
   // =======================
   final Map<int, Map<int, int>> nextDayCounts = {}; // Cache counts để dùng sau
 
@@ -221,12 +172,10 @@ Future<void> runAnalysis(
     final deToday = sortedData[i].de;
     final nextDayOthers = sortedData[i + 1].others;
 
-    // Đếm số ngày (unique days) mà số xuất hiện, không đếm số lần trong 1 ngày
+    // Tính counts trực tiếp, không cần lưu list
     nextDayCounts.putIfAbsent(deToday, () => <int, int>{});
     final counter = nextDayCounts[deToday]!;
-    // Dùng Set để lấy unique numbers trong ngày này
-    final uniqueNumbers = nextDayOthers.toSet();
-    for (final n in uniqueNumbers) {
+    for (final n in nextDayOthers) {
       counter[n] = (counter[n] ?? 0) + 1;
     }
   }
@@ -239,7 +188,7 @@ Future<void> runAnalysis(
     final sorted = counter.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    topNByDe[de] = sorted.take(topNNumbers).map((e) => e.key).toList();
+    topNByDe[de] = sorted.take(TOP_N_NUMBERS).map((e) => e.key).toList();
   });
 
   // =======================
@@ -283,7 +232,7 @@ Future<void> runAnalysis(
 
   print('\n=====================START==============================');
   print('DE NGÀY GẦN NHẤT: $latestDe');
-  print('→ TOP $topNNumbers DỰ ĐOÁN: $predTopN');
+  print('→ TOP $TOP_N_NUMBERS DỰ ĐOÁN: $predTopN');
 
   if (latestDeHistory.isNotEmpty) {
     final historyStr = latestDeHistory.map((e) => e ? 'W' : 'L').join('');
@@ -322,13 +271,25 @@ Future<void> runAnalysis(
 
     if (maxLoseStreakDe > 0) {
       print('Max LOSE liên tiếp DE $latestDe: $maxLoseStreakDe');
+      if (stateLabel == 'LOSE') {
+        if (currentStreak >= maxLoseStreakDe) {
+          print(
+              '➡ Cầu DE $latestDe đang L $currentStreak, đã chạm/qua max L lịch sử → dễ đổi cầu sang W');
+        } else if (currentStreak == maxLoseStreakDe - 1) {
+          print(
+              '➡ Cầu DE $latestDe đang L $currentStreak/${maxLoseStreakDe}, sắp chạm vùng L cực đại → có thể chuẩn bị đổi cầu');
+        } else {
+          print(
+              '➡ Cầu DE $latestDe đang L $currentStreak/${maxLoseStreakDe}, còn room L thêm trước khi tới vùng đổi cầu');
+        }
+      }
     }
   }
 
   if (roiStats.containsKey(latestDe)) {
     final s = roiStats[latestDe]!;
     print(
-        'Hit ${s.hit}/${s.total} | Winrate ${s.winrate.toStringAsFixed(2)}%');
+        'Hit ${s.hit}/${s.total} | Winrate ${s.winrate.toStringAsFixed(2)}% | Profit ${s.profit} | ROI/lần ${s.roiPerTurn.toStringAsFixed(0)}');
 
     final evCalc = EvCalculator(
       payout: PROFIT_PER_HIT_PER_POINT.toDouble(),
@@ -356,12 +317,10 @@ Future<void> runAnalysis(
 
       // Cảnh báo: nếu cầu DE vừa có chuỗi W dài và hiện đang L ngắn => dễ L tiếp
       double pointsFactor = 1.0;
-      int prevLen = 0;
-      int curLen = 0;
       if (latestDeHistory.length >= 2) {
         // Tính current streak
         bool? curState;
-        curLen = 0;
+        int curLen = 0;
         for (int i = latestDeHistory.length - 1; i >= 0; i--) {
           if (curState == null) {
             curState = latestDeHistory[i];
@@ -374,7 +333,7 @@ Future<void> runAnalysis(
         }
         // Tính đoạn ngay trước current streak
         bool? prevState;
-        prevLen = 0;
+        int prevLen = 0;
         for (int i = latestDeHistory.length - curLen - 1; i >= 0; i--) {
           if (prevState == null) {
             prevState = latestDeHistory[i];
@@ -393,6 +352,8 @@ Future<void> runAnalysis(
             prevLen >= WARN_WIN_STREAK;
         if (caution) {
           pointsFactor = 0.6; // giảm 40% tổng điểm đánh
+          print(
+              '⚠ Cảnh báo: Cầu DE $latestDe vừa gãy sau chuỗi W $prevLen, hiện đang L $curLen → giảm điểm đánh (x0.6)');
         }
       }
 
@@ -401,7 +362,7 @@ Future<void> runAnalysis(
       final totalOccurrences =
           counts.values.fold<int>(0, (sum, count) => sum + count);
 
-      print('\n📊 TẦN SUẤT XUẤT HIỆN CỦA TOP $topNNumbers (DE=$latestDe):');
+      print('\n📊 TẦN SUẤT XUẤT HIỆN CỦA TOP $TOP_N_NUMBERS (DE=$latestDe):');
       print('   Tổng số lần xuất hiện tất cả số: $totalOccurrences');
       print('   Số ngày DE=$latestDe xuất hiện: ${s.total}');
 
@@ -422,9 +383,8 @@ Future<void> runAnalysis(
             '      Lần xuất hiện gần nhất: ${cau.lastOccurrenceDays == 0 ? "Hôm nay" : cau.lastOccurrenceDays > 0 ? "${cau.lastOccurrenceDays} ngày trước" : "Chưa từng xuất hiện"}');
 
         String maxCauInfo = '${cau.maxCauLength} ngày';
-        if (cau.maxCauPosition > 0 && cau.lastOccurrenceDays == 0) {
+        if (cau.maxCauPosition > 0) {
           // đang ở trong cầu WIN (vì cầu được định nghĩa theo chuỗi xuất hiện - W)
-          // chỉ hiển thị khi số vừa xuất hiện ở lần cuối (lastOccurrenceDays == 0)
           maxCauInfo +=
               ' (đang ở vị trí ${cau.maxCauPosition}/${cau.maxCauLength} - cầu W)';
         } else if (cau.maxCauLength > 0) {
@@ -432,9 +392,8 @@ Future<void> runAnalysis(
         }
 
         String minCauInfo = '${cau.minCauLength} ngày';
-        if (cau.minCauPosition > 0 && cau.lastOccurrenceDays == 0) {
+        if (cau.minCauPosition > 0) {
           // đang ở trong cầu WIN ngắn nhất
-          // chỉ hiển thị khi số vừa xuất hiện ở lần cuối (lastOccurrenceDays == 0)
           minCauInfo +=
               ' (đang ở vị trí ${cau.minCauPosition}/${cau.minCauLength} - cầu W)';
         } else if (cau.minCauLength > 0) {
@@ -446,29 +405,15 @@ Future<void> runAnalysis(
       }
       print('');
 
-      // Tính điểm sau giảm (nếu có)
-      final pointsAfterFactor = (totalPointsToday * pointsFactor).round();
-      if (pointsFactor < 1.0) {
-        print(
-            '⚠ Cảnh báo: Cầu DE $latestDe vừa gãy sau chuỗi W ${prevLen}, hiện đang L ${curLen} → giảm điểm đánh x${pointsFactor.toStringAsFixed(1)}');
-        print('Điểm sau giảm: $totalPointsToday × ${pointsFactor.toStringAsFixed(1)} = $pointsAfterFactor điểm');
-      } else {
-        print('Điểm đánh: $totalPointsToday điểm');
-      }
-      print('');
-
-      // Format số với dấu phẩy ngăn cách hàng nghìn
-      String formatNumber(int n) {
-        return n.toString().replaceAllMapped(
-            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
-      }
-
       for (var d in evDecisions) {
-        final pointsForNumber = max(1, (pointsAfterFactor * d.fraction).round());
-        final cost = pointsForNumber * COST_PER_POINT;
-        final profit = pointsForNumber * PROFIT_PER_HIT_PER_POINT;
+        final frequency = counts[d.number] ?? 0;
+        final percentage = s.total > 0 ? (frequency / s.total * 100) : 0.0;
+        int totalPointsToday = (TOTAL_POINTS_TODAY * pointsFactor).round();
+        int pointsForNumber = max(1, (totalPointsToday * d.fraction).round());
+        int cost = pointsForNumber * COST_PER_POINT;
+        int profit = pointsForNumber * PROFIT_PER_HIT_PER_POINT;
         print(
-            'Số ${d.number.toString().padLeft(2, '0')}: $pointsForNumber điểm (${(d.fraction * 100).toStringAsFixed(1)}%) — Cost: ${formatNumber(cost)} | Profit: ${formatNumber(profit)}');
+            'Number ${d.number.toString().padLeft(2, '0')} → Points: $pointsForNumber | Cost: $cost | Profit: $profit | Fraction: ${(d.fraction * 100).toStringAsFixed(1)}% | EV: ${d.ev.toStringAsFixed(2)} | Tần suất: $frequency lần (${percentage.toStringAsFixed(1)}%)');
       }
 
       // =======================
@@ -525,7 +470,7 @@ Future<void> runAnalysis(
   // =======================
   // SOI CẦU TỔNG HỢP (từ tohop2.dart)
   // =======================
-  runCauAnalysis(sortedData, pickCount: topNNumbers);
+  runCauAnalysis(sortedData, pickCount: TOP_N_NUMBERS);
 
   print('========================END===========================');
 }
@@ -534,7 +479,7 @@ Future<void> runAnalysis(
 /// SOI CẦU (từ tohop2.dart)
 /// =======================
 void runCauAnalysis(List<DataModel> sortedData,
-    {int pickCount = TOP_N_NUMBERS_DEFAULT}) {
+    {int pickCount = TOP_N_NUMBERS}) {
   final Map<int, List<int>> historyStats = {};
   final totalCau = TotalCauStat();
   final Map<int, DeCauStat> deStats = {};
@@ -572,9 +517,10 @@ void runCauAnalysis(List<DataModel> sortedData,
     historyStats[today.de]!.addAll(tomorrow.others);
   }
   final latestDe = sortedData.last.de;
+  final latestDate = sortedData.last.date;
   // Kết quả cầu tổng
   print('\n================ CẦU TỔNG =================');
-  print('Chuỗi cầu: ${totalCau.textWithLatestDe(latestDe)}');
+  print('Chuỗi cầu: ${totalCau.textWithLatestDe(latestDe, latestDate)}');
   print('✅ Max WIN liên tiếp: ${totalCau.maxWinStreak}');
   print('❌ Max LOSE liên tiếp: ${totalCau.maxLoseStreak}');
   print(
