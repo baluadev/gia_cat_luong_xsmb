@@ -135,7 +135,7 @@ const int POINT_PER_NUMBER = 5; // mặc định nếu đánh đều 3 số
 const int COST_PER_POINT = 22500;
 const int PROFIT_PER_HIT_PER_POINT = 80000; // ví dụ lợi nhuận 1 điểm trúng
 const int TOP_N_NUMBERS = 3; // số lượng số top để dự đoán
-const int TOTAL_POINTS_TODAY = 15; // tổng điểm muốn đánh hôm nay
+const int TOTAL_POINTS_TODAY = 18; // tổng điểm muốn đánh hôm nay
 const int MIN_DE_SAMPLE =
     8; // tối thiểu số lần DE xuất hiện để coi là đủ dữ liệu
 const int MIN_HIT_PER_NUMBER =
@@ -164,54 +164,65 @@ Future<void> main() async {
   print(sortedData.first.date);
 
   // =======================
-  // MAP: DE -> COUNTS (tối ưu: tính counts trực tiếp, không cần lưu list)
-  // =======================
-  final Map<int, Map<int, int>> nextDayCounts = {}; // Cache counts để dùng sau
-
-  for (int i = 0; i < sortedData.length - 1; i++) {
-    final deToday = sortedData[i].de;
-    final nextDayOthers = sortedData[i + 1].others;
-
-    // Tính counts trực tiếp, không cần lưu list
-    nextDayCounts.putIfAbsent(deToday, () => <int, int>{});
-    final counter = nextDayCounts[deToday]!;
-    for (final n in nextDayOthers) {
-      counter[n] = (counter[n] ?? 0) + 1;
-    }
-  }
-
-  // =======================
-  // TOP N BY DE
-  // =======================
-  final Map<int, List<int>> topNByDe = {};
-  nextDayCounts.forEach((de, counter) {
-    final sorted = counter.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    topNByDe[de] = sorted.take(TOP_N_NUMBERS).map((e) => e.key).toList();
-  });
-
-  // =======================
-  // ROI: HIT + TOTAL (tối ưu: dùng Set cho contains check)
+  // ROI: HIT + TOTAL (chỉ dùng history trước đó)
   // =======================
   final Map<int, RoiStat> roiStats = {};
   final Map<int, List<bool>> deHitHistory = {}; // lưu chuỗi W/L cho từng DE
+  final Map<int, Map<int, int>> nextDayCounts = {}; // Cache counts để dùng sau (tính từ tất cả data cho phần dự đoán)
+
+  // Tính counts từ tất cả data để dùng cho phần dự đoán (ngày cuối cùng)
+  // Chỉ đếm số ngày, không đếm số lần trong 1 ngày
   for (int i = 0; i < sortedData.length - 1; i++) {
     final deToday = sortedData[i].de;
-    final topN = topNByDe[deToday];
-    if (topN == null || topN.isEmpty) continue;
+    final nextDayOthers = sortedData[i + 1].others.toSet(); // Dùng Set để lấy unique numbers
 
-    // Tối ưu: convert others sang Set để O(1) lookup
-    final nextDayOthersSet = sortedData[i + 1].others.toSet();
-    final hit = topN.any((n) => nextDayOthersSet.contains(n));
+    nextDayCounts.putIfAbsent(deToday, () => <int, int>{});
+    final counter = nextDayCounts[deToday]!;
+    for (final n in nextDayOthers) {
+      counter[n] = (counter[n] ?? 0) + 1; // Đếm số ngày, không đếm số lần
+    }
+  }
 
-    roiStats.putIfAbsent(deToday, () => RoiStat());
-    final s = roiStats[deToday]!;
-    deHitHistory.putIfAbsent(deToday, () => <bool>[]);
-    deHitHistory[deToday]!.add(hit);
+  // Backtest: Với mỗi ngày, chỉ dùng history trước đó
+  for (int i = 0; i < sortedData.length - 1; i++) {
+    final deToday = sortedData[i].de;
+    final tomorrow = sortedData[i + 1];
 
-    s.total++;
-    if (hit) s.hit++;
+    // Tìm tất cả các ngày trước đó có cùng DE
+    final Map<int, int> numberCounts = {};
+    
+    for (int j = 0; j < i; j++) {
+      if (sortedData[j].de == deToday) {
+        // Lấy others của ngày tiếp theo sau ngày j
+        if (j + 1 < sortedData.length) {
+          final nextDayOthers = sortedData[j + 1].others.toSet();
+          for (final num in nextDayOthers) {
+            numberCounts[num] = (numberCounts[num] ?? 0) + 1;
+          }
+        }
+      }
+    }
+
+    // Nếu có history, tạo top 3 và test
+    if (numberCounts.isNotEmpty) {
+      final sorted = numberCounts.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      
+      final topN = sorted.take(TOP_N_NUMBERS).map((e) => e.key).toList();
+      
+      // Kiểm tra top 3 có trong others của ngày mai không
+      final tomorrowOthersSet = tomorrow.others.toSet();
+      final hit = topN.any((num) => tomorrowOthersSet.contains(num));
+
+      // Cập nhật thống kê
+      roiStats.putIfAbsent(deToday, () => RoiStat());
+      final s = roiStats[deToday]!;
+      deHitHistory.putIfAbsent(deToday, () => <bool>[]);
+      deHitHistory[deToday]!.add(hit);
+
+      s.total++;
+      if (hit) s.hit++;
+    }
   }
 
   // =======================
@@ -227,8 +238,85 @@ Future<void> main() async {
   // DỰ ĐOÁN + PHÂN BỐ ĐIỂM
   // =======================
   final latestDe = sortedData.last.de;
-  final predTopN = topNByDe[latestDe] ?? [];
   final latestDeHistory = deHitHistory[latestDe] ?? const <bool>[];
+  
+  // Tính topN cho ngày cuối cùng từ history trước đó
+  final Map<int, int> latestNumberCounts = {};
+  final lastIndex = sortedData.length - 1;
+  
+  for (int j = 0; j < lastIndex; j++) {
+    if (sortedData[j].de == latestDe) {
+      // Lấy others của ngày tiếp theo sau ngày j
+      if (j + 1 < sortedData.length) {
+        final nextDayOthers = sortedData[j + 1].others.toSet();
+        for (final num in nextDayOthers) {
+          latestNumberCounts[num] = (latestNumberCounts[num] ?? 0) + 1;
+        }
+      }
+    }
+  }
+  
+  // Lấy top N*2 để có đủ số để sắp xếp lại theo logic ưu tiên
+  final sortedLatest = latestNumberCounts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final candidateNumbers = sortedLatest.take(TOP_N_NUMBERS * 2).map((e) => e.key).toList();
+
+  // Phân tích cầu cho các số candidate
+  final Map<int, CauAnalysis> candidateCauAnalyses = {};
+  for (var num in candidateNumbers) {
+    candidateCauAnalyses[num] = analyzeCau(sortedData, latestDe, num);
+  }
+
+  // Sắp xếp lại theo logic ưu tiên
+  candidateNumbers.sort((a, b) {
+    final freqA = latestNumberCounts[a] ?? 0;
+    final freqB = latestNumberCounts[b] ?? 0;
+    
+    // Ưu tiên 1: Tần suất xuất hiện (giảm dần)
+    if (freqA != freqB) {
+      return freqB.compareTo(freqA);
+    }
+    
+    final cauA = candidateCauAnalyses[a]!;
+    final cauB = candidateCauAnalyses[b]!;
+    
+    // Ưu tiên 2: Cầu LOSE ngắn nhất (maxLoseStreak thấp nhất)
+    final maxLoseA = cauA.maxLoseStreak;
+    final maxLoseB = cauB.maxLoseStreak;
+    if (maxLoseA != maxLoseB) {
+      return maxLoseA.compareTo(maxLoseB); // Thấp hơn → ưu tiên hơn
+    }
+    
+    // Ưu tiên 3: Nếu đang L → ưu tiên số nào có currentLoseStreak gần với maxLoseStreak nhất
+    final inCauA = cauA.inCurrentCau;
+    final inCauB = cauB.inCurrentCau;
+    
+    if (!inCauA && !inCauB) {
+      // Cả 2 đang L: ưu tiên số nào có currentLoseStreak gần với maxLoseStreak nhất
+      final curLoseA = cauA.currentLoseStreak;
+      final curLoseB = cauB.currentLoseStreak;
+      final diffA = (maxLoseA - curLoseA).abs(); // Khoảng cách đến maxLoseStreak
+      final diffB = (maxLoseB - curLoseB).abs();
+      if (diffA != diffB) {
+        return diffA.compareTo(diffB); // Gần hơn → ưu tiên hơn
+      }
+    } else if (inCauA && inCauB) {
+      // Ưu tiên 4: Nếu đang W → ưu tiên cầu W dài nhất
+      final cauLengthA = cauA.currentCauLength;
+      final cauLengthB = cauB.currentCauLength;
+      if (cauLengthA != cauLengthB) {
+        return cauLengthB.compareTo(cauLengthA); // Dài hơn → ưu tiên hơn
+      }
+    } else {
+      // Một đang W, một đang L → ưu tiên đang W
+      return inCauB ? 1 : -1; // inCauB (W) → ưu tiên hơn
+    }
+    
+    // Ưu tiên 5: Giữ nguyên thứ tự (so sánh số)
+    return a.compareTo(b);
+  });
+
+  final predTopN = candidateNumbers.take(TOP_N_NUMBERS).toList();
 
   print('\n=====================START==============================');
   print('DE NGÀY GẦN NHẤT: $latestDe');
@@ -382,26 +470,60 @@ Future<void> main() async {
         print(
             '      Lần xuất hiện gần nhất: ${cau.lastOccurrenceDays == 0 ? "Hôm nay" : cau.lastOccurrenceDays > 0 ? "${cau.lastOccurrenceDays} ngày trước" : "Chưa từng xuất hiện"}');
 
-        String maxCauInfo = '${cau.maxCauLength} ngày';
+        String maxCauInfo = 'Cầu W dài nhất: ${cau.maxCauLength} ngày';
         if (cau.maxCauPosition > 0) {
           // đang ở trong cầu WIN (vì cầu được định nghĩa theo chuỗi xuất hiện - W)
           maxCauInfo +=
               ' (đang ở vị trí ${cau.maxCauPosition}/${cau.maxCauLength} - cầu W)';
         } else if (cau.maxCauLength > 0) {
-          maxCauInfo += ' (không trong cầu này, hiện tại là L)';
+          // Không ở trong cầu dài nhất, kiểm tra cầu hiện tại
+          if (cau.inCurrentCau) {
+            maxCauInfo += ' (không trong cầu này, hiện tại đang trong cầu W ${cau.currentCauLength} ngày)';
+          } else {
+            maxCauInfo += ' (không trong cầu này, hiện tại là L)';
+          }
         }
 
-        String minCauInfo = '${cau.minCauLength} ngày';
+        String minCauInfo = 'Cầu W ngắn nhất: ${cau.minCauLength} ngày';
         if (cau.minCauPosition > 0) {
           // đang ở trong cầu WIN ngắn nhất
           minCauInfo +=
               ' (đang ở vị trí ${cau.minCauPosition}/${cau.minCauLength} - cầu W)';
         } else if (cau.minCauLength > 0) {
-          minCauInfo += ' (không trong cầu này, hiện tại là L)';
+          // Không ở trong cầu ngắn nhất, kiểm tra cầu hiện tại
+          if (cau.inCurrentCau) {
+            minCauInfo += ' (không trong cầu này, hiện tại đang trong cầu W ${cau.currentCauLength} ngày)';
+          } else {
+            minCauInfo += ' (không trong cầu này, hiện tại là L)';
+          }
         }
 
-        print('      Cầu dài nhất: $maxCauInfo');
-        print('      Cầu ngắn nhất: $minCauInfo');
+        String maxLoseInfo = 'Cầu L dài nhất: ${cau.maxLoseStreak} ngày';
+        if (cau.maxLoseStreak > 0 && !cau.inCurrentCau && cau.currentLoseStreak == cau.maxLoseStreak) {
+          maxLoseInfo += ' (đang ở vị trí ${cau.currentLoseStreak}/${cau.maxLoseStreak} - cầu L)';
+        } else if (cau.maxLoseStreak > 0) {
+          if (!cau.inCurrentCau) {
+            maxLoseInfo += ' (không trong cầu này, hiện tại đang trong cầu L ${cau.currentLoseStreak} ngày)';
+          } else {
+            maxLoseInfo += ' (không trong cầu này, hiện tại là W)';
+          }
+        }
+
+        String minLoseInfo = 'Cầu L ngắn nhất: ${cau.minLoseStreak} ngày';
+        if (cau.minLoseStreak > 0 && !cau.inCurrentCau && cau.currentLoseStreak == cau.minLoseStreak) {
+          minLoseInfo += ' (đang ở vị trí ${cau.currentLoseStreak}/${cau.minLoseStreak} - cầu L)';
+        } else if (cau.minLoseStreak > 0) {
+          if (!cau.inCurrentCau) {
+            minLoseInfo += ' (không trong cầu này, hiện tại đang trong cầu L ${cau.currentLoseStreak} ngày)';
+          } else {
+            minLoseInfo += ' (không trong cầu này, hiện tại là W)';
+          }
+        }
+
+        print('      $maxCauInfo');
+        print('      $minCauInfo');
+        print('      $maxLoseInfo');
+        print('      $minLoseInfo');
       }
       print('');
 
@@ -537,6 +659,11 @@ class CauAnalysis {
   final int maxCauPosition; // Vị trí hiện tại trong cầu dài nhất
   final int minCauLength; // Độ dài cầu ngắn nhất
   final int minCauPosition; // Vị trí hiện tại trong cầu ngắn nhất
+  final int currentCauLength; // Độ dài cầu hiện tại (0 nếu không trong cầu)
+  final bool inCurrentCau; // Đang trong cầu W hay không
+  final int maxLoseStreak; // Chuỗi LOSE liên tiếp dài nhất
+  final int minLoseStreak; // Chuỗi LOSE liên tiếp ngắn nhất
+  final int currentLoseStreak; // Chuỗi LOSE hiện tại (0 nếu đang W)
 
   CauAnalysis({
     required this.lastOccurrenceDays,
@@ -544,6 +671,11 @@ class CauAnalysis {
     required this.maxCauPosition,
     required this.minCauLength,
     required this.minCauPosition,
+    required this.currentCauLength,
+    required this.inCurrentCau,
+    required this.maxLoseStreak,
+    required this.minLoseStreak,
+    required this.currentLoseStreak,
   });
 }
 
@@ -567,15 +699,28 @@ CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
       maxCauPosition: 0,
       minCauLength: 0,
       minCauPosition: 0,
+      currentCauLength: 0,
+      inCurrentCau: false,
+      maxLoseStreak: 0,
+      minLoseStreak: 0,
+      currentLoseStreak: 0,
     );
   }
 
-  // Tìm lần xuất hiện gần nhất (từ cuối lên)
+  // Tìm lần xuất hiện gần nhất
   int lastOccurrenceDays = -1;
-  for (int i = occurrences.length - 1; i >= 0; i--) {
-    if (occurrences[i]) {
-      lastOccurrenceDays = occurrences.length - 1 - i;
-      break;
+
+  // 1. Kiểm tra xem số có xuất hiện trong others của ngày cuối cùng không
+  final lastDayOthers = sortedData.last.others.toSet();
+  if (lastDayOthers.contains(number)) {
+    lastOccurrenceDays = 0; // Hôm nay
+  } else {
+    // 2. Nếu không, tìm từ occurrences (xuất hiện trong ngày tiếp theo của DE gần nhất)
+    for (int i = occurrences.length - 1; i >= 0; i--) {
+      if (occurrences[i]) {
+        lastOccurrenceDays = occurrences.length - 1 - i + 1; // +1 vì không tính ngày cuối
+        break;
+      }
     }
   }
 
@@ -605,25 +750,29 @@ CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
   }
 
   // Tìm cầu hiện tại (cầu cuối cùng nếu đang trong cầu)
+  // Logic: Kiểm tra phần tử cuối cùng của occurrences trước
+  // - Nếu là W → đang trong cầu W, đếm ngược các W liên tiếp
+  // - Nếu là L → đang trong cầu L (inCurrentCau = false)
   int currentCauLengthNow = 0;
   int currentCauPosition = 0;
   bool inCurrentCau = false;
 
-  for (int i = occurrences.length - 1; i >= 0; i--) {
-    if (occurrences[i]) {
-      if (!inCurrentCau) {
-        inCurrentCau = true;
-        currentCauLengthNow = 1;
-        currentCauPosition = 1;
-      } else {
-        currentCauLengthNow++;
-        currentCauPosition++;
-      }
-    } else {
-      if (inCurrentCau) {
-        break;
+  if (occurrences.isNotEmpty) {
+    // Kiểm tra phần tử cuối cùng
+    if (occurrences.last) {
+      // Phần tử cuối là W → đang trong cầu W
+      inCurrentCau = true;
+      // Đếm ngược các W liên tiếp từ cuối
+      for (int i = occurrences.length - 1; i >= 0; i--) {
+        if (occurrences[i]) {
+          currentCauLengthNow++;
+          currentCauPosition++;
+        } else {
+          break;
+        }
       }
     }
+    // Nếu phần tử cuối là L, thì inCurrentCau = false (đã mặc định)
   }
 
   // Tìm max và min cầu từ lịch sử (bao gồm cả cầu hiện tại nếu có)
@@ -648,12 +797,58 @@ CauAnalysis analyzeCau(List<DataModel> sortedData, int de, int number) {
     }
   }
 
+  // Tính maxLoseStreak và minLoseStreak: chuỗi LOSE liên tiếp
+  int maxLoseStreak = 0;
+  int minLoseStreak = 0;
+  List<int> loseStreaks = [];
+  int currentLose = 0;
+  for (final occ in occurrences) {
+    if (!occ) {
+      // LOSE
+      currentLose++;
+    } else {
+      // WIN
+      if (currentLose > 0) {
+        loseStreaks.add(currentLose);
+        currentLose = 0;
+      }
+    }
+  }
+  // Thêm chuỗi L cuối cùng nếu có
+  if (currentLose > 0) {
+    loseStreaks.add(currentLose);
+  }
+  
+  if (loseStreaks.isNotEmpty) {
+    maxLoseStreak = loseStreaks.reduce(max);
+    minLoseStreak = loseStreaks.reduce(min);
+  }
+
+  // Tính currentLoseStreak: chuỗi L hiện tại từ cuối lên
+  int currentLoseStreakNow = 0;
+  if (!inCurrentCau) {
+    // Đang trong cầu L, đếm từ cuối lên
+    for (int i = occurrences.length - 1; i >= 0; i--) {
+      if (!occurrences[i]) {
+        currentLoseStreakNow++;
+      } else {
+        break;
+      }
+    }
+  }
+  // Nếu đang trong cầu W thì currentLoseStreakNow = 0
+
   return CauAnalysis(
     lastOccurrenceDays: lastOccurrenceDays,
     maxCauLength: maxCauLength,
     maxCauPosition: maxCauPosition,
     minCauLength: minCauLength,
     minCauPosition: minCauPosition,
+    currentCauLength: currentCauLengthNow,
+    inCurrentCau: inCurrentCau,
+    maxLoseStreak: maxLoseStreak,
+    minLoseStreak: minLoseStreak,
+    currentLoseStreak: currentLoseStreakNow,
   );
 }
 
